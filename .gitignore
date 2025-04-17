@@ -1,0 +1,20 @@
+# /home/stark007/Projects/Redactify/.gitignore
+
+venv/
+__pycache__/
+*.pyc
+*.log
+*.sqlite # If you use sqlite
+instance/ # If using instance folders
+
+# Sensitive config files
+.env
+
+# Uploads and Temp files (optional, depends if you want to track empty dirs)
+upload_files/
+temp_files/
+
+# Add other OS or IDE specific files (e.g., .DS_Store, .idea/, .vscode/)
+.DS_Store
+.idea/
+.vscode/

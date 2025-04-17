@@ -1,0 +1,274 @@
+/* --- Ghibli Pastel Theme --- */
+
+:root {
+    --bg-color: #FAF8F1;
+    /* Soft Cream */
+    --card-bg-color: #FFFFFF;
+    --text-color: #4F4A45;
+    /* Warm Dark Brown/Grey */
+    --heading-color: #332F2C;
+    --primary-accent: #A7C7E7;
+    /* Gentle Blue */
+    --primary-accent-hover: #94B4D7;
+    --secondary-accent: #FFDAB9;
+    /* Warm Peach */
+    --success-accent: #A0D9A0;
+    /* Soft Mint Green */
+    --success-accent-hover: #8BC98B;
+    --warning-accent: #FFE4B5;
+    /* Muted Yellow/Orange */
+    --danger-accent: #FFB3A7;
+    /* Muted Coral */
+    --border-color: #E0E0E0;
+    --input-bg: #FDFDFD;
+
+    --font-heading: 'Quicksand', sans-serif;
+    --font-body: 'Lato', sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Quicksand:wght@500;700&display=swap');
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-body);
+    line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-heading);
+    color: var(--heading-color);
+    font-weight: 700;
+}
+
+.container {
+    max-width: 800px;
+    /* Limit width for better readability */
+    margin-top: 2rem;
+    margin-bottom: 4rem;
+}
+
+/* --- Card Style --- */
+.content-card {
+    background-color: var(--card-bg-color);
+    padding: 2rem 2.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border-color);
+    margin-top: 1rem;
+}
+
+/* --- Form Styling --- */
+.form-label {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: var(--heading-color);
+}
+
+.form-control,
+.form-select {
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    padding: 0.75rem 1rem;
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-accent);
+    box-shadow: 0 0 0 0.2rem rgba(167, 199, 231, 0.3);
+    /* Soft focus ring */
+    background-color: #fff;
+}
+
+textarea.form-control {
+    min-height: 80px;
+}
+
+/* Custom File Input */
+.file-input-wrapper {
+    position: relative;
+    overflow: hidden;
+    display: inline-block;
+    margin-bottom: 1rem;
+    /* Add some space below */
+}
+
+.file-input-wrapper input[type=file] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    cursor: pointer;
+    height: 100%;
+    width: 100%;
+}
+
+.file-input-button {
+    display: inline-block;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    background-color: var(--secondary-accent);
+    color: var(--heading-color);
+    border-radius: 8px;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+
+.file-input-button:hover {
+    background-color: #FFCDA0;
+    /* Slightly darker peach */
+}
+
+
+#selected-filename {
+    margin-left: 1rem;
+    font-style: italic;
+    color: #6c757d;
+    /* Bootstrap muted color */
+    display: inline-block;
+    /* Keep it on the same line */
+    vertical-align: middle;
+}
+
+
+/* --- Buttons --- */
+.btn {
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    border: none;
+    /* Remove default bootstrap border */
+}
+
+.btn-primary {
+    background-color: var(--primary-accent);
+    color: #fff;
+    /* White text on primary */
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-accent-hover);
+    color: #fff;
+}
+
+.btn-primary:disabled {
+    background-color: var(--primary-accent);
+    opacity: 0.7;
+}
+
+
+.btn-success {
+    background-color: var(--success-accent);
+    color: var(--heading-color);
+}
+
+.btn-success:hover {
+    background-color: var(--success-accent-hover);
+    color: var(--heading-color);
+}
+
+.btn-secondary {
+    background-color: #E0E0E0;
+    /* Light Grey */
+    color: var(--heading-color);
+}
+
+.btn-secondary:hover {
+    background-color: #CCCCCC;
+    color: var(--heading-color);
+}
+
+/* Spinner inside button */
+#submit-button .spinner-border {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+    vertical-align: -0.125em;
+    /* Align better with text */
+}
+
+/* --- Progress Zone --- */
+#progress-zone {
+    margin-top: 2rem;
+}
+
+#status-message {
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Alert variants using CSS variables */
+.alert-info {
+    background-color: #E0F2F7;
+    color: #0277BD;
+    border: 1px solid #B3E5FC;
+}
+
+.alert-success {
+    background-color: var(--success-accent);
+    color: #2E7D32;
+    border: 1px solid #C8E6C9;
+}
+
+.alert-danger {
+    background-color: var(--danger-accent);
+    color: #C62828;
+    border: 1px solid #FFCDD2;
+}
+
+.alert-warning {
+    background-color: var(--warning-accent);
+    color: #835A00;
+    border: 1px solid #FFECB3;
+}
+
+
+.progress {
+    height: 30px;
+    /* Make bar taller */
+    border-radius: 8px;
+    background-color: #E9ECEF;
+    /* Bootstrap default bg */
+    overflow: hidden;
+    /* Ensure inner bar respects radius */
+}
+
+#progress-bar {
+    background-color: var(--secondary-accent);
+    /* Peach progress */
+    color: var(--heading-color);
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: width 0.4s ease;
+    /* Smooth progress animation */
+}
+
+#progress-bar.bg-success {
+    background-color: var(--success-accent);
+}
+
+#progress-bar.bg-danger {
+    background-color: var(--danger-accent);
+}
+
+
+/* --- Footer/Cleanup --- */
+.cleanup-form {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}

@@ -1,0 +1,16 @@
+Flask
+PyMuPDF
+presidio
+pdf2image
+Pillow
+opencv-python
+python-dotenv
+Flask-Material
+Flask-Bootstrap
+layoutparser
+paddleocr
+PyYAML
+requests
+shapely
+celery
+redis

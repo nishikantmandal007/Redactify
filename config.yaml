@@ -1,0 +1,28 @@
+# Example config.yaml (Place in the ROOT directory, e.g., /home/stark007/Projects/Redactify/)
+# User settings will override defaults in config.py
+
+#presidio_config:
+#nlp_config: # Example: If using Spacy
+#nlp_engine_name: spacy
+#models: [{ "lang_code": "en", "model_name": "en_core_web_lg" }]
+#supported_languages: ["en"]
+
+# config.yaml
+presidio_config:
+  nlp_config:
+    nlp_engine_name: spacy
+    models: [{ "lang_code": "en", "model_name": "en_core_web_trf" }] # Use the transformer model
+  supported_languages: ["en"]
+  # Add other Presidio settings below if needed
+
+temp_dir: temp_files # Optional: Custom temp dir name
+upload_dir: upload_files # Optional: Custom upload dir name
+redis_url: redis://localhost:6379/0 # Default, change if needed
+
+max_file_size_mb: 100 # Optional: Increase max upload size
+ocr_confidence_threshold: 0.4 # Optional: Lower OCR confidence requirement
+presidio_confidence_threshold: 0.3 # Example: Only accept results with score >= 0.4 (Adjust this value!)
+celery_task_soft_time_limit: 600 # Optional: Longer soft timeout (10 min)
+celery_task_hard_time_limit: 660 # Optional: Longer hard timeout (11 min)
+
+temp_file_max_age_seconds: 172800 # Optional: Keep temp files for 2 days
