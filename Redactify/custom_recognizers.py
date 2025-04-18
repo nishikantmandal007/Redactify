@@ -5,26 +5,25 @@ import re
 from typing import List, Optional
 
 # IMPORTANT: Presidio imports might vary slightly by version.
-# These are common imports for pattern recognizers and custom classes.
+# Ensure these match your installed presidio-analyzer version.
 try:
     from presidio_analyzer import PatternRecognizer, Pattern, EntityRecognizer
     from presidio_analyzer.nlp_engine import NlpArtifacts
-    from presidio_analyzer.context_aware_enhancers import ContextAwareEnhancer
-    # RecognizerResult might be needed for custom classes
+    # ContextAwareEnhancer might be useful later but not used in current recognizers
+    # from presidio_analyzer.context_aware_enhancers import ContextAwareEnhancer
     from presidio_analyzer import RecognizerResult
-except ImportError as e:
-    logging.error(f"Failed to import Presidio components: {e}. Is presidio-analyzer installed correctly?", exc_info=True)
-    # Define dummy classes to prevent NameError later, but log the failure
+except ImportError as import_err:
+    logging.error(f"Failed to import Presidio components: {import_err}. Custom recognizers may not load.", exc_info=True)
+    # Define dummy classes to prevent NameError later, but functionality will be lost.
     Pattern = type('Pattern', (object,), {})
     PatternRecognizer = type('PatternRecognizer', (object,), {})
     EntityRecognizer = type('EntityRecognizer', (object,), {})
     #RecognizerResult = type('RecognizerResult', (object,), {})
     #NlpArtifacts = type('NlpArtifacts', (object,), {}) # Dummy type hint
-    # List and Optional are imported from typing at the top level
 
 # --- Configuration for Scores (Adjust as needed) ---
-SCORE_HIGH_CONFIDENCE = 0.9 # PAN structure + checksum
-SCORE_MEDIUM_HIGH_CONFIDENCE = 0.75 # Aadhaar format (no checksum), Specific App ID
+SCORE_HIGH_CONFIDENCE = 0.9 # PAN structure + checksum (if enabled and valid)
+SCORE_MEDIUM_HIGH_CONFIDENCE = 0.75 # Aadhaar format (no checksum), Specific App ID, State-Prefixed RollNo
 SCORE_MEDIUM_CONFIDENCE = 0.65 # More variable formats (Voter ID examples), Mobile (use cautiously)
 SCORE_LOW_CONFIDENCE = 0.4 # Broad numeric patterns (like generic roll no) - high FP risk
 
@@ -32,119 +31,111 @@ SCORE_LOW_CONFIDENCE = 0.4 # Broad numeric patterns (like generic roll no) - hig
 # Using constants makes it easier to manage entity names consistently
 INDIA_AADHAAR_ENTITY = "INDIA_AADHAAR_NUMBER"
 INDIA_PAN_ENTITY = "INDIA_PAN_NUMBER"
-INDIA_MOBILE_ENTITY = "INDIA_MOBILE_NUMBER"
+INDIA_MOBILE_ENTITY = "INDIA_MOBILE_NUMBER" # Optional, might overlap with default
 INDIA_VOTER_ID_ENTITY = "INDIA_VOTER_ID"
-EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER"
+EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER" # Covers Roll No, App ID etc.
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO) # Ensure logs from this module are visible
+# Ensure logger is configured (e.g., in app.py or here)
+# Basic config if run standalone for testing, but Flask logger is preferred
+if not logger.hasHandlers():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - CUSTOM_REC - %(message)s')
 
-# --- Helper Function for PAN Checksum (Example) ---
+# --- Helper Function for PAN Checksum (Example - Placeholder Logic) ---
 def _validate_pan_checksum(pan: str) -> bool:
     """
-    Validates the PAN checksum character (last character).
-    Note: This is a basic implementation based on common understanding.
-          Refer to official sources for definitive algorithm if critical.
+    Placeholder for PAN checksum validation.
+    Replace with the actual algorithm for production use.
     """
-    if not isinstance(pan, str) or len(pan) != 10:
+    if not isinstance(pan, str) or len(pan) != 10 or not re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", pan):
         return False
-    # Check format again just in case
-    if not re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", pan):
-        return False
-
-    # Simplified checksum logic (may vary slightly based on interpretation)
-    # Typically involves mapping chars to values, summing, modulo op.
-    # This is a placeholder - implement the actual algorithm if needed.
-    # For demonstration, let's assume it's always valid for now.
-    # Replace this with real checksum logic for true validation.
-    is_valid_checksum = True # Placeholder
-    # logger.debug(f"PAN Checksum validation for {pan}: {'Valid' if is_valid_checksum else 'Invalid'}")
+    # --- Implement Real Checksum Logic Here ---
+    # Example: Return True for now to allow matching based on format + class structure
+    is_valid_checksum = True
+    # --- End Placeholder ---
+    # logger.debug(f"PAN Checksum validation placeholder for {pan}: Returning {is_valid_checksum}")
     return is_valid_checksum
 
-# --- Custom Python Recognizer Class for PAN (with Checksum) ---
+# --- Custom Python Recognizer Class for PAN (with Checksum Option) ---
 class IndiaPanChecksumRecognizer(EntityRecognizer):
     """
-    Recognizes Indian PAN numbers using regex and validates the checksum character.
-    Inherits from EntityRecognizer for custom logic.
+    Recognizes Indian PAN numbers using regex and optionally validates checksum.
     """
     SUPPORTED_ENTITIES = [INDIA_PAN_ENTITY]
-    # PAN Format: 5 Letters, 4 Numbers, 1 Letter (Checksum) - All Caps
     PAN_REGEX = re.compile(r"\b([A-Z]{5}[0-9]{4}[A-Z])\b")
-    CHECK_CHECKSUM = True # Flag to enable/disable checksum validation easily
-    CONTEXT = ["pan", "permanent account", "income tax", "form 16", "tax deduction"]
+    # Default to checking checksum, can be overridden during init
+    DEFAULT_CHECK_CHECKSUM = True
+    CONTEXT = ["pan", "permanent account", "income tax", "form 16", "tax deduction", "form 26as"]
 
     def __init__(
         self,
         supported_language: str = "en",
         name: Optional[str] = "IndiaPanChecksumRecognizer",
         supported_entities: Optional[List[str]] = None,
-        check_checksum: bool = True,
+        check_checksum: bool = DEFAULT_CHECK_CHECKSUM,
+        context: Optional[List[str]] = None,
     ):
+        self.check_checksum = check_checksum
+        # Use provided context or default
+        context_to_use = context if context is not None else self.CONTEXT
         super().__init__(
             supported_entities=supported_entities if supported_entities else self.SUPPORTED_ENTITIES,
             name=name,
             supported_language=supported_language,
-            context=self.CONTEXT
+            context=context_to_use
         )
-        self.check_checksum = check_checksum
         logger.info(f"Initialized {self.name} (Checksum validation {'enabled' if self.check_checksum else 'disabled'}).")
 
     def load(self) -> None:
-        """Load is not needed for this regex-based recognizer."""
+        """No external resources needed."""
         pass
 
     def analyze(self, text: str, entities: List[str], nlp_artifacts: NlpArtifacts) -> List[RecognizerResult]:
         """
-        Analyzes text to find PAN numbers, optionally validating checksum.
+        Find potential PANs and validate if required.
         """
-        results = []
-        # Find all potential matches using regex
+        results: List[RecognizerResult] = []
+        # Check if this recognizer should run for the requested entities
+        if not self.supported_entities[0] in entities:
+            return results
+
         matches = self.PAN_REGEX.finditer(text)
-
         for match in matches:
-            pan_candidate = match.group(1) # Get the matched PAN string
-            start_index = match.start(1)
-            end_index = match.end(1)
+            pan_candidate = match.group(1)
+            start, end = match.start(1), match.end(1)
 
-            # Perform checksum validation if enabled
+            # Checksum validation logic
+            score = SCORE_HIGH_CONFIDENCE
+            checksum_valid = None # Undetermined state
             if self.check_checksum:
-                if _validate_pan_checksum(pan_candidate):
-                    # If checksum is valid (or validation passes placeholder)
-                    result = RecognizerResult(
-                        entity_type=self.SUPPORTED_ENTITIES[0],
-                        start=start_index,
-                        end=end_index,
-                        score=SCORE_HIGH_CONFIDENCE, # High confidence due to format + checksum
-                        analysis_explanation=self.build_analysis_explanation( # Optional explanation
-                            recognizer_name=self.name,
-                            pattern_name="PAN Format + Checksum",
-                            pattern=self.PAN_REGEX.pattern,
-                            original_score=SCORE_HIGH_CONFIDENCE,
-                            validation_result=True
-                        )
-                    )
-                    results.append(result)
-                    logger.debug(f"Found valid PAN (Checksum OK): {pan_candidate} at [{start_index}:{end_index}]")
-                else:
-                    # Checksum failed, ignore this candidate
-                    logger.debug(f"Ignoring potential PAN (Checksum Failed): {pan_candidate} at [{start_index}:{end_index}]")
+                checksum_valid = _validate_pan_checksum(pan_candidate)
+                if not checksum_valid:
+                    logger.debug(f"{self.name}: Ignoring potential PAN (Checksum Failed): {pan_candidate}")
+                    continue # Skip this match if checksum fails
+                # If checksum is valid, score remains high
             else:
-                # Checksum validation disabled, accept based on regex alone
-                result = RecognizerResult(
-                    entity_type=self.SUPPORTED_ENTITIES[0],
-                    start=start_index,
-                    end=end_index,
-                    score=SCORE_HIGH_CONFIDENCE - 0.1, # Slightly lower score if checksum not checked
-                     analysis_explanation=self.build_analysis_explanation(
-                        recognizer_name=self.name,
-                        pattern_name="PAN Format Only",
-                        pattern=self.PAN_REGEX.pattern,
-                        original_score=SCORE_HIGH_CONFIDENCE - 0.1,
-                        validation_result=None # Checksum not checked
-                    )
-                )
-                results.append(result)
-                logger.debug(f"Found potential PAN (Checksum Disabled): {pan_candidate} at [{start_index}:{end_index}]")
+                # Checksum disabled, slightly lower confidence
+                score = SCORE_HIGH_CONFIDENCE - 0.05
+                checksum_valid = None # Indicate not checked
+
+            # Create result if pattern matches and checksum (if checked) is valid
+            result = RecognizerResult(
+                entity_type=self.SUPPORTED_ENTITIES[0],
+                start=start,
+                end=end,
+                score=score,
+                analysis_explanation=self.build_analysis_explanation(
+                    recognizer_name=self.name,
+                    pattern_name="PAN Format" + ("+Checksum" if self.check_checksum and checksum_valid else ""),
+                    pattern=self.PAN_REGEX.pattern,
+                    original_score=score,
+                    validation_result=checksum_valid
+                ),
+                # Add context span if needed for debugging
+                # recognition_metadata={RecognizerResult.RECOGNIZER_NAME_KEY: self.name}
+            )
+            results.append(result)
+            logger.debug(f"{self.name}: Found {'valid ' if checksum_valid else ''}PAN{' (Checksum disabled)' if not self.check_checksum else ''}: {pan_candidate} at [{start}:{end}] score={score:.2f}")
 
         return results
 
@@ -152,29 +143,33 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
 
 # 1. Aadhaar Number Recognizer (India) - Format only
 try:
-    # More precise regex: requires space/hyphen OR nothing between groups
-    aadhaar_regex = r"\b(\d{4}(?:[-\s]?)\d{4}(?:[-\s]?)\d{4})\b"
+    # Allows optional single space or hyphen between 4-digit groups
+    aadhaar_regex = r"\b(?:\d{4}[-\s]?){2}\d{4}\b"
     aadhaar_pattern = Pattern(
-        name="aadhaar_number_format",
+        name="aadhaar_number_format_spaced",
         regex=aadhaar_regex,
         score=SCORE_MEDIUM_HIGH_CONFIDENCE
     )
-    # Consider adding a pattern for 12 digits with no spaces/hyphens?
-    # aadhaar_pattern_nospace = Pattern(name="aadhaar_nospace", regex=r"\b\d{12}\b", score=SCORE_MEDIUM_CONFIDENCE)
+    # Pattern for 12 digits with no spaces/hyphens (use lookarounds for safety)
+    aadhaar_pattern_nospace = Pattern(
+        name="aadhaar_number_format_nospace",
+        regex=r"\b(?<!\d)\d{12}(?!\d)\b",
+        score=SCORE_MEDIUM_CONFIDENCE # Slightly lower confidence than spaced version
+    )
     india_aadhaar_recognizer = PatternRecognizer(
         supported_entity=INDIA_AADHAAR_ENTITY,
         name="IndiaAadhaarRecognizer",
-        patterns=[aadhaar_pattern], # Add aadhaar_pattern_nospace here if needed
-        context=["aadhaar", "uidai", "unique id", "enrollment"]
+        patterns=[aadhaar_pattern, aadhaar_pattern_nospace], # Include both patterns
+        context=["aadhaar", "uidai", "unique id", "enrollment", "aadhar card"]
     )
     logger.info("Defined India Aadhaar Number recognizer (format only).")
 except Exception as e:
-    logger.error(f"Failed to create Aadhaar recognizer: {e}", exc_info=True)
+    logger.error(f"Failed to define Aadhaar recognizer: {e}", exc_info=True)
     india_aadhaar_recognizer = None
 
-# 2. Indian Mobile Number Recognizer (Optional)
+# 2. Indian Mobile Number Recognizer (Optional - Consider default PHONE_NUMBER)
 try:
-    # Allow optional space after +91/0 prefix
+    # Allows optional space/hyphen after prefix, optional space before 10 digits
     mobile_regex = r"\b(?:(?:\+91\s*[-\s]?)|0)?\s*([6-9]\d{9})\b"
     mobile_pattern = Pattern(
         name="indian_mobile_format",
@@ -185,86 +180,94 @@ try:
         supported_entity=INDIA_MOBILE_ENTITY,
         name="IndiaMobileRecognizer",
         patterns=[mobile_pattern]
-        # Context less useful here
     )
     logger.info("Defined India Mobile Number recognizer (use cautiously).")
 except Exception as e:
-    logger.error(f"Failed to create Mobile recognizer: {e}", exc_info=True)
+    logger.error(f"Failed to define Mobile recognizer: {e}", exc_info=True)
     india_mobile_recognizer = None
 
 # 3. Voter ID (EPIC) Number Recognizer (India - Example Formats)
-# Needs significant testing and potentially more patterns for different states/eras.
 try:
     voterid_patterns = [
-        # Format: 3 letters, 7 digits (Common)
         Pattern(name="voter_id_3L7D", regex=r"\b[A-Z]{3}\d{7}\b", score=SCORE_MEDIUM_CONFIDENCE),
-        # Format: 2 letters / 3 digits / 6 digits (Seen in some states)
         Pattern(name="voter_id_2L3D6D", regex=r"\b[A-Z]{2}[/\s-]?\d{3}[/\s-]?\d{6}\b", score=SCORE_MEDIUM_CONFIDENCE),
-        # Add other observed valid formats here with appropriate regex and scores
+        # Add more known valid formats here
     ]
     india_voterid_recognizer = PatternRecognizer(
         supported_entity=INDIA_VOTER_ID_ENTITY,
         name="IndiaVoterIdRecognizer",
         patterns=voterid_patterns,
-        context=["voter", "epic", "election commission", "eci", "matdata", "pehchan patra"]
+        context=["voter", "epic", "election commission", "eci", "matdata", "pehchan patra", "booth", "assembly"]
     )
     logger.info("Defined India Voter ID recognizer (Multiple Example Formats).")
 except Exception as e:
-    logger.error(f"Failed to create Voter ID recognizer: {e}", exc_info=True)
+    logger.error(f"Failed to define Voter ID recognizer: {e}", exc_info=True)
     india_voterid_recognizer = None
+
 
 # 4. Generic Exam Identifier Recognizer (Roll No, App ID etc.)
 try:
     exam_id_patterns = [
-        # Roll No: ~Year(2-4d)-Branch(2-4L)-Num(4-8d) - Flexible separators
+        # Roll No: ~Year(2-4d)-Branch(2-4L)-Num(4-8d)
         Pattern(name="rollno_alphanum_prefix", regex=r"\b\d{2,4}[A-Z]{2,4}[-\s]?\d{4,8}\b", score=0.7),
-        # Roll No: Purely numeric (specific length, e.g., 10 or 12 digits) - USE WITH CAUTION
-        Pattern(name="rollno_numeric_10d", regex=r"\b(?<!\d)\d{10}(?!\d)\b", score=SCORE_LOW_CONFIDENCE), # Use lookarounds
-        Pattern(name="rollno_numeric_12d", regex=r"\b(?<!\d)\d{12}(?!\d)\b", score=SCORE_LOW_CONFIDENCE), # Use lookarounds
-        # App ID: Prefix(2-5L)-Year(2/4d)-Num(4+d) - Flexible separators
+        # Roll No: Purely numeric (10 or 12 digits) - Low confidence, use lookarounds
+        Pattern(name="rollno_numeric_10d", regex=r"\b(?<!\d)\d{10}(?!\d)\b", score=SCORE_LOW_CONFIDENCE),
+        Pattern(name="rollno_numeric_12d", regex=r"\b(?<!\d)\d{12}(?!\d)\b", score=SCORE_LOW_CONFIDENCE),
+        # App ID: Prefix(2-5L)-Year(2/4d)-Num(4+d)
         Pattern(name="app_id_structured", regex=r"\b[A-Z]{2,5}(?:/|-)\d{2,4}(?:/|-)\d{4,}\b", score=0.8),
-        # Center Code: L(1-3)-D(2-4) or LLLDDD - Combine? Or keep separate? Let's keep separate
-        # Pattern(name="center_code_alphanum", regex=r"\b[A-Z]{1,3}(?:-)?\d{2,4}\b", score=0.6),
-        # Add specific JEE/NEET/Other exam formats if known
-        # Example JEE Main App No (Year + 10 Digits):
-        Pattern(name="jee_main_app_no", regex=r"\b(2403\d{8}|2303\d{8})\b", score=0.85), # Example for 2024, 2023
+        # Example JEE Main App No (Year + 8 Digits - Adjusted):
+        # Use non-capturing group for years to avoid confusion
+        Pattern(name="jee_main_app_no", regex=r"\b(?:2303|2403|2503)\d{8}\b", score=0.85),
+        # State-Code Roll Numbers: 2 Letters, 8-10 Digits
+        Pattern(
+            name="rollno_state_prefix_numeric",
+            regex=r"\b[A-Z]{2}\d{8,10}\b",
+            score=SCORE_MEDIUM_HIGH_CONFIDENCE # Pretty specific format
+        ),
+        # Add more specific exam/university formats here
     ]
     generic_exam_id_recognizer = PatternRecognizer(
         supported_entity=EXAM_IDENTIFIER_ENTITY,
         name="ExamIdentifierRecognizer",
         patterns=exam_id_patterns,
         context=[
-            "roll", "number", "no.", "regn", "registration", "reg.", "admit", "hall ticket",
+            "roll", "number", "no.", "regn", "registration", "reg.", "admit card", "hall ticket",
             "application", "form", "id", "centre", "center", "code", "venue", "seat no",
-            "jee", "neet", "gate", "upsc", "ssc", "ibps" # Add exam body names
+            "jee", "neet", "gate", "upsc", "ssc", "ibps", "candidate", "examination",
+            "enrollment", "enrolment" # Added context
         ]
     )
-    logger.info("Defined generic Exam Identifier recognizer.")
+    logger.info("Defined generic Exam Identifier recognizer (incl. state-prefix).")
 except Exception as e:
-    logger.error(f"Failed to create Exam ID recognizer: {e}", exc_info=True)
+    logger.error(f"Failed to define Exam ID recognizer: {e}", exc_info=True)
     generic_exam_id_recognizer = None
 
 
-# --- Add Recognizer Instances to the List for Export ---
-# Ensure we only add successfully created instances
+# --- List of Recognizers to Export ---
+# Filter out any recognizers that failed during definition
 custom_recognizer_list = [
     rec for rec in [
-        # Add the *instance* of the custom class for PAN
-        IndiaPanChecksumRecognizer() if 'IndiaPanChecksumRecognizer' in locals() else None,
-        # Add instances of PatternRecognizers
+        # Use instance of the custom class
+        IndiaPanChecksumRecognizer() if 'IndiaPanChecksumRecognizer' in locals() and IndiaPanChecksumRecognizer is not None else None,
+        # Pattern recognizer instances
         india_aadhaar_recognizer,
-        # india_mobile_recognizer, # Still cautious about this one, uncomment if desired
+        # india_mobile_recognizer, # Uncomment if needed
         india_voterid_recognizer,
         generic_exam_id_recognizer,
-    ] if rec is not None
+    ] if rec is not None # Final check to ensure instance is valid
 ]
 
 # --- Helper Function ---
 def get_custom_pii_entity_names():
-    """Returns a list of the unique 'supported_entity' names defined above."""
-    if not custom_recognizer_list: return []
-    # Get entity names (first one if multiple supported, which is rare for these)
-    entity_names = set(rec.supported_entities[0] for rec in custom_recognizer_list if rec.supported_entities)
+    """Returns a sorted list of the unique 'supported_entity' names defined above."""
+    if not custom_recognizer_list:
+        return []
+    entity_names = set()
+    for rec in custom_recognizer_list:
+        # Ensure supported_entities is a non-empty list/tuple
+        if rec and hasattr(rec, 'supported_entities') and rec.supported_entities:
+            # Add the first supported entity (standard practice for these recognizers)
+            entity_names.add(rec.supported_entities[0])
     return sorted(list(entity_names))
 
 # Log final list being exported for verification
