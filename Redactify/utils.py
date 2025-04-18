@@ -376,6 +376,24 @@ def redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
                      logging.warning(f"OCR yielded empty text after filtering for page {page_num}.")
                      redacted_images.append(redacted_pil_image)
                      continue
+                
+                # --- Log the extracted OCR text ---
+                # Use logging.debug for potentially large amounts of text
+                logging.debug(f"--- OCR Text for Page {page_num} ---")
+                logging.debug(page_text)
+                logging.debug(f"--- End OCR Text for Page {page_num} ---")
+                # --- End logging ---
+
+                # --- PII Detection with Score Threshold ---
+                logging.debug(f"Running Presidio Analyzer on page {page_num} OCR text.") # Keep this debug message too
+                analyzer_result = analyzer.analyze(
+                    text=page_text,
+                    entities=pii_types_selected,
+                    language='en',
+                    score_threshold= PRESIDIO_CONFIDENCE_THRESHOLD # Use configured threshold
+                )
+                entities_to_redact_conf = analyzer_result
+        
 
                 # --- PII Detection with Score Threshold ---
                 logging.debug(f"Running Presidio Analyzer on page {page_num} OCR text.")
