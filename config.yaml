@@ -20,8 +20,8 @@ upload_dir: upload_files # Optional: Custom upload dir name
 redis_url: redis://localhost:6379/0 # Default, change if needed
 
 max_file_size_mb: 100 # Optional: Increase max upload size
-ocr_confidence_threshold: 0.4 # Optional: Lower OCR confidence requirement
-presidio_confidence_threshold: 0.3 # Example: Only accept results with score >= 0.4 (Adjust this value!)
+ocr_confidence_threshold: 0.1 # Optional: Lower OCR confidence requirement
+presidio_confidence_threshold: 0.35 # Example: Only accept results with score >= 0.4 (Adjust this value!)
 celery_task_soft_time_limit: 600 # Optional: Longer soft timeout (10 min)
 celery_task_hard_time_limit: 660 # Optional: Longer hard timeout (11 min)
 
