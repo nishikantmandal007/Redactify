@@ -1,16 +1,30 @@
-Flask
-PyMuPDF
-presidio
-pdf2image
-Pillow
-opencv-python
-python-dotenv
-Flask-Material
-Flask-Bootstrap
-layoutparser
-paddleocr
-PyYAML
-requests
-shapely
-celery
-redis
+# Redactify - PDF PII Redaction Tool Requirements
+# Core Dependencies
+Flask>=2.0.0
+PyMuPDF>=1.18.0  # For PDF processing
+celery>=5.2.0  # For background task processing
+redis>=3.5.3  # Required for Celery backend
+
+# PDF Processing
+pdf2image>=1.16.0  # For converting PDF pages to images
+pyzbar>=0.1.8  # For QR code detection
+
+# Computer Vision & OCR
+Pillow>=9.0.0  # Python Imaging Library
+opencv-python>=4.5.0  # Computer Vision library
+paddleocr>=2.5.0  # OCR engine for text detection
+layoutparser>=0.3.4  # For document layout analysis
+
+# PII Detection
+presidio-analyzer>=2.2.0  # Microsoft's PII detection library
+presidio-anonymizer>=2.2.0
+
+# Web Interface
+Flask-Bootstrap>=3.3.7  # Bootstrap integration for Flask
+Flask-WTF>=1.0.0  # Form handling for Flask
+
+# Utilities
+PyYAML>=6.0  # YAML parsing for configuration files
+python-dotenv>=0.20.0  # Environment variable management
+requests>=2.27.0  # HTTP library
+shapely>=1.8.0  # Geometric operations library

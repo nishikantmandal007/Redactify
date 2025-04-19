@@ -46,7 +46,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const csrfToken = csrfTokenInput ? csrfTokenInput.value : null; // Get CSRF token value
 
             try {
-                const response = await fetch('/process_pdf', {
+                // Updated to use the same URL as the form action
+                const response = await fetch(uploadForm.action, {
                     method: 'POST',
                     body: formData,
                     headers: {
@@ -97,6 +98,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function checkTaskStatus(taskId) {
         try {
+            // Get the base URL from window.location, then append the task_status route
             const response = await fetch(`/task_status/${taskId}`);
             if (!response.ok) {
                 // Handle server error during status check (e.g., 500)
@@ -115,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (data.state === 'SUCCESS' && data.result) {
                     // Set download link and show it
-                    downloadButton.href = `/result/${taskId}`; // Use task ID for result lookup
+                    downloadButton.href = `/result/${taskId}`;
                     showElement(resultLinkDiv);
                 } else if (data.state === 'SUCCESS' && !data.result) {
                     // Handle success but missing result file case

@@ -1,38 +1,25 @@
-/* --- Ghibli Pastel Theme --- */
-
+/* Material Design inspired styling for Redactify */
 :root {
-    --bg-color: #FAF8F1;
-    /* Soft Cream */
-    --card-bg-color: #FFFFFF;
-    --text-color: #4F4A45;
-    /* Warm Dark Brown/Grey */
-    --heading-color: #332F2C;
-    --primary-accent: #A7C7E7;
-    /* Gentle Blue */
-    --primary-accent-hover: #94B4D7;
-    --secondary-accent: #FFDAB9;
-    /* Warm Peach */
-    --success-accent: #A0D9A0;
-    /* Soft Mint Green */
-    --success-accent-hover: #8BC98B;
-    --warning-accent: #FFE4B5;
-    /* Muted Yellow/Orange */
-    --danger-accent: #FFB3A7;
-    /* Muted Coral */
-    --border-color: #E0E0E0;
-    --input-bg: #FDFDFD;
-
-    --font-heading: 'Quicksand', sans-serif;
-    --font-body: 'Lato', sans-serif;
+    --primary-color: #4285F4;
+    --primary-dark: #3367d6;
+    --accent-color: #EA4335;
+    --text-color: #202124;
+    --text-secondary: #5f6368;
+    --background: #f8f9fa;
+    --card-background: #ffffff;
+    --shadow-color: rgba(60, 64, 67, 0.3);
+    --success-color: #34A853;
+    --warning-color: #FBBC05;
+    --error-color: #EA4335;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Quicksand:wght@500;700&display=swap');
-
 body {
-    background-color: var(--bg-color);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+    background-color: var(--background);
     color: var(--text-color);
-    font-family: var(--font-body);
     line-height: 1.6;
+    margin: 0;
+    padding-bottom: 2rem;
 }
 
 h1,
@@ -53,17 +40,21 @@ h6 {
     margin-bottom: 4rem;
 }
 
-/* --- Card Style --- */
+/* Card styling */
 .content-card {
-    background-color: var(--card-bg-color);
-    padding: 2rem 2.5rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-    border: 1px solid var(--border-color);
-    margin-top: 1rem;
+    background-color: var(--card-background);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    transition: all 0.3s cubic-bezier(.25, .8, .25, 1);
 }
 
-/* --- Form Styling --- */
+.content-card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.16), 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Form elements styling */
 .form-label {
     font-weight: bold;
     margin-bottom: 0.5rem;
@@ -72,32 +63,28 @@ h6 {
 
 .form-control,
 .form-select {
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    background-color: var(--input-bg);
-    padding: 0.75rem 1rem;
-    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border-radius: 4px;
+    border: 1px solid #dadce0;
+    padding: 10px 12px;
+    transition: border-color 0.3s;
 }
 
 .form-control:focus,
 .form-select:focus {
-    border-color: var(--primary-accent);
-    box-shadow: 0 0 0 0.2rem rgba(167, 199, 231, 0.3);
-    /* Soft focus ring */
-    background-color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.25);
+    outline: none;
 }
 
 textarea.form-control {
     min-height: 80px;
 }
 
-/* Custom File Input */
+/* File input styling */
 .file-input-wrapper {
-    position: relative;
-    overflow: hidden;
-    display: inline-block;
-    margin-bottom: 1rem;
-    /* Add some space below */
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
 }
 
 .file-input-wrapper input[type=file] {
@@ -111,52 +98,61 @@ textarea.form-control {
 }
 
 .file-input-button {
-    display: inline-block;
-    padding: 0.75rem 1.25rem;
+    background-color: #f1f3f4;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 8px 16px;
     cursor: pointer;
-    background-color: var(--secondary-accent);
-    color: var(--heading-color);
-    border-radius: 8px;
-    font-weight: bold;
-    transition: background-color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    margin-right: 12px;
+    transition: background-color 0.2s;
 }
 
 .file-input-button:hover {
-    background-color: #FFCDA0;
-    /* Slightly darker peach */
+    background-color: #e8eaed;
 }
 
+.file-input-button .material-icons {
+    margin-right: 8px;
+    font-size: 18px;
+}
 
 #selected-filename {
-    margin-left: 1rem;
-    font-style: italic;
-    color: #6c757d;
-    /* Bootstrap muted color */
-    display: inline-block;
-    /* Keep it on the same line */
-    vertical-align: middle;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
 }
 
-
-/* --- Buttons --- */
+/* Button styling */
 .btn {
-    border-radius: 8px;
-    padding: 0.75rem 1.5rem;
-    font-weight: bold;
-    transition: all 0.2s ease;
-    border: none;
-    /* Remove default bootstrap border */
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn .material-icons {
+    margin-right: 8px;
+    font-size: 18px;
 }
 
 .btn-primary {
-    background-color: var(--primary-accent);
-    color: #fff;
-    /* White text on primary */
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
-.btn-primary:hover {
-    background-color: var(--primary-accent-hover);
-    color: #fff;
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .btn-primary:disabled {
@@ -164,15 +160,16 @@ textarea.form-control {
     opacity: 0.7;
 }
 
-
 .btn-success {
-    background-color: var(--success-accent);
-    color: var(--heading-color);
+    background-color: var(--success-color);
+    border-color: var(--success-color);
 }
 
-.btn-success:hover {
-    background-color: var(--success-accent-hover);
-    color: var(--heading-color);
+.btn-success:hover,
+.btn-success:focus {
+    background-color: #2d9448;
+    border-color: #2d9448;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .btn-secondary {
@@ -195,7 +192,22 @@ textarea.form-control {
     /* Align better with text */
 }
 
-/* --- Progress Zone --- */
+/* Progress bar styling */
+.progress {
+    overflow: hidden;
+    height: 8px;
+    border-radius: 4px;
+    background-color: #e0e0e0;
+}
+
+.progress-bar {
+    background-color: var(--primary-color);
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+
+/* Alerts and messages */
 #progress-zone {
     margin-top: 2rem;
 }
@@ -209,66 +221,94 @@ textarea.form-control {
 }
 
 /* Alert variants using CSS variables */
+.alert {
+    border-radius: 4px;
+    border: none;
+    padding: 12px 16px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.alert .material-icons {
+    margin-right: 12px;
+    font-size: 20px;
+}
+
 .alert-info {
-    background-color: #E0F2F7;
-    color: #0277BD;
-    border: 1px solid #B3E5FC;
+    background-color: rgba(66, 133, 244, 0.1);
+    color: var(--primary-dark);
 }
 
 .alert-success {
-    background-color: var(--success-accent);
-    color: #2E7D32;
-    border: 1px solid #C8E6C9;
-}
-
-.alert-danger {
-    background-color: var(--danger-accent);
-    color: #C62828;
-    border: 1px solid #FFCDD2;
+    background-color: rgba(52, 168, 83, 0.1);
+    color: var(--success-color);
 }
 
 .alert-warning {
-    background-color: var(--warning-accent);
-    color: #835A00;
-    border: 1px solid #FFECB3;
+    background-color: rgba(251, 188, 5, 0.1);
+    color: #eb8c00;
 }
 
-
-.progress {
-    height: 30px;
-    /* Make bar taller */
-    border-radius: 8px;
-    background-color: #E9ECEF;
-    /* Bootstrap default bg */
-    overflow: hidden;
-    /* Ensure inner bar respects radius */
+.alert-danger {
+    background-color: rgba(234, 67, 53, 0.1);
+    color: var(--error-color);
 }
 
-#progress-bar {
-    background-color: var(--secondary-accent);
-    /* Peach progress */
-    color: var(--heading-color);
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: width 0.4s ease;
-    /* Smooth progress animation */
+/* Form switch styling */
+.form-check-input {
+    width: 38px;
+    height: 20px;
+    margin-top: 0.25rem;
 }
 
-#progress-bar.bg-success {
-    background-color: var(--success-accent);
+.form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
-#progress-bar.bg-danger {
-    background-color: var(--danger-accent);
+/* Barcode options section */
+#barcode-options {
+    padding: 12px;
+    background-color: #f1f3f4;
+    border-radius: 4px;
+    margin-top: 10px;
+    transition: all 0.3s ease;
 }
 
-
-/* --- Footer/Cleanup --- */
+/* Cleanup form styling */
 .cleanup-form {
-    margin-top: 3rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border-color);
     text-align: center;
+    margin-top: 1rem;
+}
+
+.cleanup-form button {
+    font-size: 0.8rem;
+    text-transform: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .content-card {
+        padding: 1rem;
+    }
+
+    .btn {
+        padding: 0.5rem 1rem;
+    }
+
+    #selected-filename {
+        max-width: 150px;
+    }
+}
+
+/* Fix for multi-select height */
+.form-select[size] {
+    height: auto;
+}
+
+/* Fix for form validation messages */
+.invalid-feedback {
+    display: block;
+    margin-top: 0.25rem;
 }

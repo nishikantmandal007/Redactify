@@ -1,28 +1,66 @@
-# Example config.yaml (Place in the ROOT directory, e.g., /home/stark007/Projects/Redactify/)
-# User settings will override defaults in config.py
+# Redactify Configuration File
+# Place in the ROOT directory (e.g., /home/stark007/Projects/Redactify/)
+# Settings here override defaults in Redactify/core/config.py
 
-#presidio_config:
-#nlp_config: # Example: If using Spacy
-#nlp_engine_name: spacy
-#models: [{ "lang_code": "en", "model_name": "en_core_web_lg" }]
-#supported_languages: ["en"]
-
-# config.yaml
+# ====================================================================
+# PRESIDIO NLP CONFIGURATION - Text Analysis & PII Recognition Settings
+# ====================================================================
 presidio_config:
   nlp_config:
     nlp_engine_name: spacy
-    models: [{ "lang_code": "en", "model_name": "en_core_web_trf" }] # Use the transformer model
+    models: [{ "lang_code": "en", "model_name": "en_core_web_trf" }] # Transformer model (high accuracy)
+    # Alternative options: en_core_web_lg (large), en_core_web_md (medium), en_core_web_sm (small)
   supported_languages: ["en"]
-  # Add other Presidio settings below if needed
+  # Uncomment and customize the following to add custom recognizers:
+  # recognizers:
+  #   - name: "Student ID Recognizer"
+  #     supported_language: "en"
+  #     supported_entity: "STUDENT_ID"
+  #     patterns:
+  #       - name: "student id pattern"
+  #         regex: "\\b[A-Z]\\d{8}\\b"
+  #         score: 0.7
 
-temp_dir: temp_files # Optional: Custom temp dir name
-upload_dir: upload_files # Optional: Custom upload dir name
-redis_url: redis://localhost:6379/0 # Default, change if needed
+# ====================================================================
+# FILE STORAGE CONFIGURATION
+# ====================================================================
+# Directory paths
+temp_dir: temp_files
+upload_dir: upload_files
 
-max_file_size_mb: 100 # Optional: Increase max upload size
-ocr_confidence_threshold: 0.1 # Optional: Lower OCR confidence requirement
-presidio_confidence_threshold: 0.35 # Example: Only accept results with score >= 0.4 (Adjust this value!)
-celery_task_soft_time_limit: 600 # Optional: Longer soft timeout (10 min)
-celery_task_hard_time_limit: 660 # Optional: Longer hard timeout (11 min)
+# File lifecycle
+temp_file_max_age_seconds: 172800 # Keep temp files for 2 days
 
-temp_file_max_age_seconds: 172800 # Optional: Keep temp files for 2 days
+# File size limits
+max_file_size_mb: 100 # Maximum upload file size in megabytes
+
+# ====================================================================
+# PROCESSING & ANALYSIS CONFIGURATION
+# ====================================================================
+# PII Detection thresholds
+ocr_confidence_threshold: 0.1 # Lower threshold means more text will be detected (may include false positives)
+presidio_confidence_threshold: 0.35 # Higher threshold = stricter PII detection (may miss some PII)
+
+# Service URLs
+redis_url: redis://localhost:6379/0 # Redis connection for Celery tasks
+
+# ====================================================================
+# TASK PROCESSING CONFIGURATION
+# ====================================================================
+# Celery task timeouts
+celery_task_soft_time_limit: 600 # 10 minutes - worker receives timeout signal
+celery_task_hard_time_limit: 660 # 11 minutes - forceful termination
+
+# ====================================================================
+# WEB SERVER CONFIGURATION
+# ====================================================================
+# Uncomment and customize as needed
+# host: 0.0.0.0  # Default: 127.0.0.1 (localhost only)
+# port: 8080     # Default: 5000
+
+# ====================================================================
+# LOGGING CONFIGURATION
+# ====================================================================
+# Uncomment to customize logging
+# log_level: DEBUG  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+# log_file: logs/redactify.log  # Log file location

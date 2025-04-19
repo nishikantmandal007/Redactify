@@ -6,6 +6,7 @@
 {% block styles %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -34,14 +35,17 @@
 
         <!-- === Input Zone === -->
         <div id="input-zone">
-            <form method="POST" enctype="multipart/form-data" id="upload-form" action="{{ url_for('process_ajax') }}">
+            <form method="POST" enctype="multipart/form-data" id="upload-form"
+                action="{{ url_for('main.process_ajax') }}">
                 {# Action points to AJAX handler #}
                 {{ form.csrf_token }}
 
                 <div class="mb-4">
                     <label for="pdf_file" class="form-label">1. Choose PDF File</label>
                     <div class="file-input-wrapper">
-                        <span class="file-input-button">Browse File...</span>
+                        <span class="file-input-button">
+                            <i class="material-icons">file_upload</i> Browse File...
+                        </span>
                         {# Ensure the actual file input has the id="pdf_file" #}
                         {{ form.pdf_file(class="form-control", style="opacity: 0; position: absolute; left: -9999px;")
                         }}
@@ -59,14 +63,35 @@
                     <small class="form-text text-muted">Select the kinds of sensitive info to remove.</small>
                 </div>
 
+                <!-- New Barcode Redaction Section -->
+                <div class="mb-4">
+                    <div class="form-check form-switch">
+                        {{ form.redact_barcodes(class="form-check-input") }}
+                        <label class="form-check-label" for="redact_barcodes">
+                            <i class="material-icons align-middle">qr_code_scanner</i> Enable Barcode/QR Code Redaction
+                        </label>
+                    </div>
+
+                    <div id="barcode-options" class="mt-2 mb-2">
+                        <label for="barcode_types" class="form-label">Select Barcode Types to Redact:</label>
+                        {{ form.barcode_types(class="form-select", size=5, title="Hold Ctrl (or Cmd on Mac) to select
+                        multiple types") }}
+                        <small class="form-text text-muted">Select specific barcode formats to redact.</small>
+                    </div>
+                </div>
+
                 <div class="mb-3">
-                    <label for="keyword_rules" class="form-label">3. Keyword Filters (Optional)</label>
+                    <label for="keyword_rules" class="form-label">
+                        <i class="material-icons align-middle">filter_list</i> 3. Keyword Filters (Optional)
+                    </label>
                     {{ form.keyword_rules(class="form-control", rows=3, placeholder="One keyword per line (e.g.,
                     Confidential Report)\nOnly redact detected PII if it ALSO contains one of these keywords.") }}
                 </div>
 
                 <div class="mb-4">
-                    <label for="regex_rules" class="form-label">4. Regex Filters (Optional)</label>
+                    <label for="regex_rules" class="form-label">
+                        <i class="material-icons align-middle">code</i> 4. Regex Filters (Optional)
+                    </label>
                     {{ form.regex_rules(class="form-control", rows=3, placeholder="One valid Python regex per line
                     (e.g., .*@internal\\.com$)\nOnly redact detected PII if the PII text ALSO matches one of these
                     patterns.") }}
@@ -81,6 +106,7 @@
 
                 <div class="d-grid gap-2"> {# Use grid for full-width button? Optional #}
                     <button type="submit" class="btn btn-primary btn-lg" id="submit-button">
+                        <i class="material-icons align-middle">security</i>
                         <span id="submit-text">Start Redaction</span>
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"
                             id="loading-spinner" style="display: none;"></span>
@@ -95,7 +121,7 @@
             <h3 class="text-center mb-3">Processing PDF...</h3>
 
             <div id="status-message" class="alert alert-info" role="alert">
-                Initializing...
+                <i class="material-icons align-middle">info</i> Initializing...
             </div>
 
             <div class="progress mb-3" style="height: 30px; font-size: 1rem;">
@@ -107,20 +133,16 @@
 
             <div id="result-link" class="text-center mt-4" style="display: none;">
                 <a href="#" id="download-button" class="btn btn-success btn-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor"
-                        class="bi bi-download me-2" viewBox="0 0 16 16">
-                        <path
-                            d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
-                        <path
-                            d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
-                    </svg>
+                    <i class="material-icons align-middle">download</i>
                     Download Redacted PDF
                 </a>
             </div>
 
             <div class="text-center mt-4">
-                {# Use a button type to prevent form submission, use JS for action #}
-                <button type="button" id="reset-button" class="btn btn-secondary">Start Over / Upload New</button>
+                <button type="button" id="reset-button" class="btn btn-secondary">
+                    <i class="material-icons align-middle">refresh</i>
+                    Start Over / Upload New
+                </button>
             </div>
 
         </div><!-- /progress-zone -->
@@ -129,10 +151,13 @@
 
     <!-- Manual Cleanup Trigger (Optional) -->
     <div class="cleanup-form">
-        <form action="{{ url_for('trigger_cleanup') }}" method="POST"
+        <form action="{{ url_for('main.trigger_cleanup') }}" method="POST"
             onsubmit="return confirm('Are you sure you want to clean up old temporary files?');">
             {{ form.csrf_token() }} {# Use form's CSRF token for this too #}
-            <button type="submit" class="btn btn-outline-secondary btn-sm">Cleanup Old Files</button>
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="material-icons align-middle" style="font-size: 1rem;">delete_sweep</i>
+                Cleanup Old Files
+            </button>
             <small class="text-muted d-block">Removes files older than {{ (TEMP_FILE_MAX_AGE_SECONDS / 3600)|int }}
                 hours from temp/upload directories.</small>
         </form>
@@ -145,4 +170,25 @@
 {% block scripts %}
 {{ super() }} {# Includes Bootstrap JS #}
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+<script>
+    // Toggle barcode options based on the redact_barcodes checkbox
+    document.addEventListener('DOMContentLoaded', function () {
+        const redactBarcodesCheckbox = document.getElementById('redact_barcodes');
+        const barcodeOptions = document.getElementById('barcode-options');
+
+        function updateBarcodeOptionsVisibility() {
+            if (redactBarcodesCheckbox.checked) {
+                barcodeOptions.style.display = 'block';
+            } else {
+                barcodeOptions.style.display = 'none';
+            }
+        }
+
+        // Initial state
+        updateBarcodeOptionsVisibility();
+
+        // Add event listener
+        redactBarcodesCheckbox.addEventListener('change', updateBarcodeOptionsVisibility);
+    });
+</script>
 {% endblock %}

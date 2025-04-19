@@ -25,7 +25,7 @@
     </div>
 
     <div class="mt-3">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Upload Another File</a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-secondary">Upload Another File</a>
     </div>
 
 </div>
@@ -42,7 +42,7 @@
         const resultLinkDiv = document.getElementById('result-link');
         const downloadButton = document.getElementById('download-button');
 
-        fetch(`/task_status/${taskId}`)
+        fetch("/task_status/{{ task_id }}")
             .then(response => response.json())
             .then(data => {
                 // Update progress bar
@@ -75,7 +75,7 @@
                 // Handle completion states
                 if (data.state === 'SUCCESS') {
                     if (data.result) {
-                        downloadButton.href = `/result/${taskId}`; // Link to result endpoint
+                        downloadButton.href = "/result/{{ task_id }}";
                         resultLinkDiv.style.display = 'block'; // Show download link
                     } else {
                         statusMessageDiv.textContent = 'Task completed, but result file is missing!';

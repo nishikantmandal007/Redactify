@@ -1,4 +1,5 @@
-# /home/stark007/Projects/Redactify/Redactify/custom_recognizers.py
+#!/usr/bin/env python3
+# Redactify/recognizers/custom_recognizers.py
 
 import logging
 import re
@@ -9,8 +10,6 @@ from typing import List, Optional
 try:
     from presidio_analyzer import PatternRecognizer, Pattern, EntityRecognizer
     from presidio_analyzer.nlp_engine import NlpArtifacts
-    # ContextAwareEnhancer might be useful later but not used in current recognizers
-    # from presidio_analyzer.context_aware_enhancers import ContextAwareEnhancer
     from presidio_analyzer import RecognizerResult
 except ImportError as import_err:
     logging.error(f"Failed to import Presidio components: {import_err}. Custom recognizers may not load.", exc_info=True)
@@ -18,28 +17,27 @@ except ImportError as import_err:
     Pattern = type('Pattern', (object,), {})
     PatternRecognizer = type('PatternRecognizer', (object,), {})
     EntityRecognizer = type('EntityRecognizer', (object,), {})
-    #RecognizerResult = type('RecognizerResult', (object,), {})
-    #NlpArtifacts = type('NlpArtifacts', (object,), {}) # Dummy type hint
 
 # --- Configuration for Scores (Adjust as needed) ---
-SCORE_HIGH_CONFIDENCE = 0.9 # PAN structure + checksum (if enabled and valid)
-SCORE_MEDIUM_HIGH_CONFIDENCE = 0.75 # Aadhaar format (no checksum), Specific App ID, State-Prefixed RollNo
-SCORE_MEDIUM_CONFIDENCE = 0.65 # More variable formats (Voter ID examples), Mobile (use cautiously)
-SCORE_LOW_CONFIDENCE = 0.4 # Broad numeric patterns (like generic roll no) - high FP risk
+SCORE_HIGH_CONFIDENCE = 0.9  # PAN structure + checksum (if enabled and valid)
+SCORE_MEDIUM_HIGH_CONFIDENCE = 0.75  # Aadhaar format (no checksum), Specific App ID, State-Prefixed RollNo
+SCORE_MEDIUM_CONFIDENCE = 0.65  # More variable formats (Voter ID examples), Mobile (use cautiously)
+SCORE_LOW_CONFIDENCE = 0.4  # Broad numeric patterns (like generic roll no) - high FP risk
 
 # --- Entity Type Constants ---
 # Using constants makes it easier to manage entity names consistently
 INDIA_AADHAAR_ENTITY = "INDIA_AADHAAR_NUMBER"
 INDIA_PAN_ENTITY = "INDIA_PAN_NUMBER"
-INDIA_MOBILE_ENTITY = "INDIA_MOBILE_NUMBER" # Optional, might overlap with default
+INDIA_MOBILE_ENTITY = "INDIA_MOBILE_NUMBER"  # Optional, might overlap with default
 INDIA_VOTER_ID_ENTITY = "INDIA_VOTER_ID"
-EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER" # Covers Roll No, App ID etc.
+EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER"  # Covers Roll No, App ID etc.
 
 logger = logging.getLogger(__name__)
 # Ensure logger is configured (e.g., in app.py or here)
 # Basic config if run standalone for testing, but Flask logger is preferred
 if not logger.hasHandlers():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - CUSTOM_REC - %(message)s')
+
 
 # --- Helper Function for PAN Checksum (Example - Placeholder Logic) ---
 def _validate_pan_checksum(pan: str) -> bool:
@@ -53,8 +51,8 @@ def _validate_pan_checksum(pan: str) -> bool:
     # Example: Return True for now to allow matching based on format + class structure
     is_valid_checksum = True
     # --- End Placeholder ---
-    # logger.debug(f"PAN Checksum validation placeholder for {pan}: Returning {is_valid_checksum}")
     return is_valid_checksum
+
 
 # --- Custom Python Recognizer Class for PAN (with Checksum Option) ---
 class IndiaPanChecksumRecognizer(EntityRecognizer):
@@ -106,17 +104,17 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
 
             # Checksum validation logic
             score = SCORE_HIGH_CONFIDENCE
-            checksum_valid = None # Undetermined state
+            checksum_valid = None  # Undetermined state
             if self.check_checksum:
                 checksum_valid = _validate_pan_checksum(pan_candidate)
                 if not checksum_valid:
                     logger.debug(f"{self.name}: Ignoring potential PAN (Checksum Failed): {pan_candidate}")
-                    continue # Skip this match if checksum fails
+                    continue  # Skip this match if checksum fails
                 # If checksum is valid, score remains high
             else:
                 # Checksum disabled, slightly lower confidence
                 score = SCORE_HIGH_CONFIDENCE - 0.05
-                checksum_valid = None # Indicate not checked
+                checksum_valid = None  # Indicate not checked
 
             # Create result if pattern matches and checksum (if checked) is valid
             result = RecognizerResult(
@@ -131,13 +129,12 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
                     original_score=score,
                     validation_result=checksum_valid
                 ),
-                # Add context span if needed for debugging
-                # recognition_metadata={RecognizerResult.RECOGNIZER_NAME_KEY: self.name}
             )
             results.append(result)
             logger.debug(f"{self.name}: Found {'valid ' if checksum_valid else ''}PAN{' (Checksum disabled)' if not self.check_checksum else ''}: {pan_candidate} at [{start}:{end}] score={score:.2f}")
 
         return results
+
 
 # --- Pattern Recognizers (Simpler format matching) ---
 
@@ -154,12 +151,12 @@ try:
     aadhaar_pattern_nospace = Pattern(
         name="aadhaar_number_format_nospace",
         regex=r"\b(?<!\d)\d{12}(?!\d)\b",
-        score=SCORE_MEDIUM_CONFIDENCE # Slightly lower confidence than spaced version
+        score=SCORE_MEDIUM_CONFIDENCE  # Slightly lower confidence than spaced version
     )
     india_aadhaar_recognizer = PatternRecognizer(
         supported_entity=INDIA_AADHAAR_ENTITY,
         name="IndiaAadhaarRecognizer",
-        patterns=[aadhaar_pattern, aadhaar_pattern_nospace], # Include both patterns
+        patterns=[aadhaar_pattern, aadhaar_pattern_nospace],  # Include both patterns
         context=["aadhaar", "uidai", "unique id", "enrollment", "aadhar card"]
     )
     logger.info("Defined India Aadhaar Number recognizer (format only).")
@@ -222,7 +219,7 @@ try:
         Pattern(
             name="rollno_state_prefix_numeric",
             regex=r"\b[A-Z]{2}\d{8,10}\b",
-            score=SCORE_MEDIUM_HIGH_CONFIDENCE # Pretty specific format
+            score=SCORE_MEDIUM_HIGH_CONFIDENCE  # Pretty specific format
         ),
         # Add more specific exam/university formats here
     ]
@@ -234,7 +231,7 @@ try:
             "roll", "number", "no.", "regn", "registration", "reg.", "admit card", "hall ticket",
             "application", "form", "id", "centre", "center", "code", "venue", "seat no",
             "jee", "neet", "gate", "upsc", "ssc", "ibps", "candidate", "examination",
-            "enrollment", "enrolment" # Added context
+            "enrollment", "enrolment"  # Added context
         ]
     )
     logger.info("Defined generic Exam Identifier recognizer (incl. state-prefix).")
@@ -254,8 +251,9 @@ custom_recognizer_list = [
         # india_mobile_recognizer, # Uncomment if needed
         india_voterid_recognizer,
         generic_exam_id_recognizer,
-    ] if rec is not None # Final check to ensure instance is valid
+    ] if rec is not None  # Final check to ensure instance is valid
 ]
+
 
 # --- Helper Function ---
 def get_custom_pii_entity_names():
@@ -269,6 +267,7 @@ def get_custom_pii_entity_names():
             # Add the first supported entity (standard practice for these recognizers)
             entity_names.add(rec.supported_entities[0])
     return sorted(list(entity_names))
+
 
 # Log final list being exported for verification
 logger.info(f"Exporting {len(custom_recognizer_list)} custom recognizers with entities: {get_custom_pii_entity_names()}")
