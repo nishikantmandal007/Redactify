@@ -18,6 +18,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const resetButton = document.getElementById('reset-button'); // Add this button to your HTML if needed
     const csrfTokenInput = document.querySelector('input[name="csrf_token"]'); // Get CSRF token
 
+    // PDF Preview elements
+    const togglePreviewBtn = document.getElementById('toggle-preview-btn');
+    const pdfPreviewDiv = document.getElementById('pdf-preview');
+    const pdfPreviewFrame = document.getElementById('pdf-preview-frame');
+
     let pollIntervalId = null; // To store the interval ID for polling
 
     // --- Event Listeners ---
@@ -26,6 +31,28 @@ document.addEventListener('DOMContentLoaded', function () {
     if (fileInput && selectedFilenameSpan) {
         fileInput.addEventListener('change', function () {
             selectedFilenameSpan.textContent = this.files.length > 0 ? this.files[0].name : 'No file chosen';
+        });
+    }
+
+    // Toggle PDF preview
+    if (togglePreviewBtn) {
+        togglePreviewBtn.addEventListener('click', function () {
+            if (pdfPreviewDiv.style.display === 'none') {
+                // Show preview
+                pdfPreviewDiv.style.display = 'block';
+                togglePreviewBtn.querySelector('span').textContent = 'Hide Preview';
+                togglePreviewBtn.querySelector('i').textContent = 'visibility_off';
+
+                // Load PDF into iframe if not already loaded
+                if (!pdfPreviewFrame.src) {
+                    pdfPreviewFrame.src = downloadButton.href;
+                }
+            } else {
+                // Hide preview
+                pdfPreviewDiv.style.display = 'none';
+                togglePreviewBtn.querySelector('span').textContent = 'Preview PDF';
+                togglePreviewBtn.querySelector('i').textContent = 'visibility';
+            }
         });
     }
 
@@ -51,150 +78,145 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'POST',
                     body: formData,
                     headers: {
-                        // Include CSRF token if your app uses it (Flask-WTF usually does)
-                        'X-CSRFToken': csrfToken
-                    }
+                        'X-CSRFToken': csrfToken, // Include CSRF token in header if needed
+                    },
+                    // Don't set Content-Type header; fetch sets it with boundary for FormData
                 });
 
-                const data = await response.json();
-
                 if (!response.ok) {
-                    // Handle errors returned from the backend (e.g., validation, save errors)
-                    throw new Error(data.error || `Server error: ${response.statusText}`);
+                    throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
                 }
 
-                // Task queued successfully
-                hideElement(inputZone);
-                showElement(progressZone);
-                statusMessageDiv.textContent = 'Task queued successfully. Starting processing...';
-                startPolling(data.task_id);
+                const responseData = await response.json();
 
+                if (responseData.error) {
+                    // Handle error from server
+                    statusMessageDiv.className = 'alert alert-danger';
+                    statusMessageDiv.textContent = responseData.error;
+                    showLoading(false);
+                } else if (responseData.task_id) {
+                    // Success - hide input, show progress
+                    hideElement(inputZone);
+                    showElement(progressZone);
+                    startTaskPolling(responseData.task_id);
+                } else {
+                    // Unexpected response format
+                    statusMessageDiv.className = 'alert alert-warning';
+                    statusMessageDiv.textContent = 'Unexpected server response. Please try again.';
+                    showLoading(false);
+                }
             } catch (error) {
+                // Network or other error
                 console.error('Form submission error:', error);
-                showError(`Submission failed: ${error.message}`);
-                showLoading(false); // Reset button state
+                statusMessageDiv.className = 'alert alert-danger';
+                statusMessageDiv.textContent = 'Error: ' + error.message;
+                showLoading(false);
             }
         });
     }
 
-    // Reset button handler (optional)
+    // Reset button handler
     if (resetButton) {
         resetButton.addEventListener('click', resetUI);
     }
 
+    // --- Polling Functions ---
+    function startTaskPolling(taskId) {
+        if (pollIntervalId) {
+            clearInterval(pollIntervalId); // Clear any existing poll
+        }
+
+        pollIntervalId = setInterval(async function () {
+            try {
+                const response = await fetch(`/task_status/${taskId}`);
+                if (!response.ok) {
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+
+                const data = await response.json();
+                updateTaskProgress(data, taskId);
+
+                // Check if we should stop polling
+                if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
+                    clearInterval(pollIntervalId);
+                    pollIntervalId = null;
+                    showLoading(false);
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+                statusMessageDiv.textContent = 'Error checking task status: ' + error.message;
+                statusMessageDiv.className = 'alert alert-danger';
+            }
+        }, 2000); // Poll every 2 seconds
+    }
+
+    function updateTaskProgress(data, taskId) {
+        const progressPercent = Math.round(data.progress || 0);
+
+        // Update progress bar
+        if (progressBar) {
+            progressBar.style.width = `${progressPercent}%`;
+            progressBar.setAttribute('aria-valuenow', progressPercent);
+            if (progressText) progressText.textContent = `${progressPercent}%`;
+        }
+
+        // Update status message
+        if (statusMessageDiv && data.status) {
+            statusMessageDiv.textContent = data.status;
+
+            // Update alert type based on task state
+            statusMessageDiv.className = 'alert'; // Reset classes
+            if (data.state === 'SUCCESS') {
+                statusMessageDiv.classList.add('alert-success');
+                progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                progressBar.classList.add('bg-success');
+            } else if (data.state === 'FAILURE') {
+                statusMessageDiv.classList.add('alert-danger');
+                progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                progressBar.classList.add('bg-danger');
+            } else if (data.state === 'RETRY') {
+                statusMessageDiv.classList.add('alert-warning');
+            } else {
+                statusMessageDiv.classList.add('alert-info');
+                progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
+            }
+        }
+
+        // Handle task completion
+        if (data.state === 'SUCCESS' && data.result) {
+            if (downloadButton) {
+                downloadButton.href = `/result/${taskId}`;
+                showElement(resultLinkDiv);
+
+                // Automatically load PDF preview when available
+                if (pdfPreviewFrame && pdfPreviewDiv) {
+                    // Use the preview endpoint instead of temp endpoint for iframe
+                    pdfPreviewFrame.src = `/preview/${taskId}`;
+                    showElement(pdfPreviewDiv);
+                }
+            }
+        }
+    }
 
     // --- Helper Functions ---
 
-    function startPolling(taskId) {
-        // Clear any existing interval
-        if (pollIntervalId) {
-            clearInterval(pollIntervalId);
-        }
-        // Initial check
-        checkTaskStatus(taskId);
-        // Start polling every 2 seconds
-        pollIntervalId = setInterval(() => checkTaskStatus(taskId), 2000);
-    }
-
-    async function checkTaskStatus(taskId) {
-        try {
-            // Get the base URL from window.location, then append the task_status route
-            const response = await fetch(`/task_status/${taskId}`);
-            if (!response.ok) {
-                // Handle server error during status check (e.g., 500)
-                throw new Error(`Status check failed: ${response.statusText}`);
-            }
-            const data = await response.json();
-
-            // Update UI based on task data
-            updateProgressUI(data);
-
-            // Stop polling if task is finished (Success or Failure)
-            if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
-                clearInterval(pollIntervalId);
-                pollIntervalId = null; // Clear interval ID
-                showLoading(false); // Ensure button is reset if somehow still loading
-
-                if (data.state === 'SUCCESS' && data.result) {
-                    // Set download link and show it
-                    downloadButton.href = `/result/${taskId}`;
-                    showElement(resultLinkDiv);
-                } else if (data.state === 'SUCCESS' && !data.result) {
-                    // Handle success but missing result file case
-                    showError("Task completed, but the result file seems to be missing.");
-                }
-            }
-
-        } catch (error) {
-            console.error('Error fetching task status:', error);
-            showError('Could not fetch task status. Please check console or try refreshing.');
-            // Consider stopping polling on repeated errors?
-            // clearInterval(pollIntervalId);
-            // pollIntervalId = null;
-            // showLoading(false);
-        }
-    }
-
-    function updateProgressUI(data) {
-        const progressPercent = Math.min(Math.max(data.progress || 0, 0), 100); // Clamp between 0-100
-
-        // Update progress bar
-        progressBar.style.width = progressPercent + '%';
-        progressBar.setAttribute('aria-valuenow', progressPercent);
-        progressText.textContent = progressPercent + '%';
-
-        // Update status message and style
-        statusMessageDiv.textContent = data.status || 'Waiting...';
-        statusMessageDiv.className = 'alert'; // Reset classes
-        if (data.state === 'SUCCESS') {
-            statusMessageDiv.classList.add('alert-success');
-            progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
-            progressBar.classList.add('bg-success');
-        } else if (data.state === 'FAILURE') {
-            statusMessageDiv.classList.add('alert-danger');
-            progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
-            progressBar.classList.add('bg-danger');
-        } else if (data.state === 'RETRY') {
-            statusMessageDiv.classList.add('alert-warning');
-            progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
-            progressBar.classList.remove('bg-success', 'bg-danger'); // Ensure correct color during retry
-        } else { // PENDING, STARTED, PROGRESS
-            statusMessageDiv.classList.add('alert-info');
-            progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
+    function clearStatus() {
+        if (statusMessageDiv) statusMessageDiv.textContent = '';
+        if (progressBar) {
+            progressBar.style.width = '0%';
+            progressBar.setAttribute('aria-valuenow', 0);
             progressBar.classList.remove('bg-success', 'bg-danger');
+            progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
         }
-        showElement(statusMessageDiv); // Ensure it's visible
+        if (progressText) progressText.textContent = '0%';
     }
 
     function showLoading(isLoading) {
-        if (isLoading) {
-            submitButton.disabled = true;
-            hideElement(submitText);
-            showElement(loadingSpinner);
-        } else {
-            submitButton.disabled = false;
-            showElement(submitText);
-            hideElement(loadingSpinner);
+        if (submitButton) {
+            submitButton.disabled = isLoading;
+            loadingSpinner.style.display = isLoading ? 'inline-block' : 'none';
+            submitText.style.opacity = isLoading ? '0.7' : '1';
         }
-    }
-
-    function showError(message) {
-        statusMessageDiv.textContent = message;
-        statusMessageDiv.className = 'alert alert-danger';
-        showElement(statusMessageDiv);
-        hideElement(progressZone); // Hide progress bar on error maybe? Or show failed bar?
-        showElement(inputZone); // Show input form again
-    }
-
-    function clearStatus() {
-        hideElement(statusMessageDiv);
-        statusMessageDiv.textContent = '';
-        statusMessageDiv.className = 'alert'; // Reset class
-        progressBar.style.width = '0%';
-        progressBar.setAttribute('aria-valuenow', 0);
-        progressText.textContent = '0%';
-        progressBar.classList.remove('bg-success', 'bg-danger');
-        progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
     }
 
     // Function to reset the entire UI to initial state
@@ -210,6 +232,18 @@ document.addEventListener('DOMContentLoaded', function () {
         hideElement(resultLinkDiv);
         showElement(inputZone);
         showLoading(false);
+
+        // Reset PDF preview
+        if (pdfPreviewDiv) {
+            pdfPreviewDiv.style.display = 'none';
+        }
+        if (togglePreviewBtn) {
+            togglePreviewBtn.querySelector('span').textContent = 'Preview PDF';
+            togglePreviewBtn.querySelector('i').textContent = 'visibility';
+        }
+        if (pdfPreviewFrame) {
+            pdfPreviewFrame.src = '';
+        }
     }
 
 

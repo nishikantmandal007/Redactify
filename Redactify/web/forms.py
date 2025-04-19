@@ -2,7 +2,7 @@
 # Redactify/web/forms.py
 
 from flask_wtf import FlaskForm
-from wtforms import FileField, SubmitField, SelectMultipleField, TextAreaField, BooleanField
+from wtforms import FileField, SubmitField, SelectMultipleField, TextAreaField, BooleanField, widgets
 from wtforms.validators import InputRequired, Optional, ValidationError
 import re  # Import re for custom validator
 
@@ -26,6 +26,13 @@ def validate_each_line_regex(form, field):
             raise ValidationError(error_message)
 
 
+# Custom widget for multi-checkbox rendering
+class MultiCheckboxField(SelectMultipleField):
+    """A multiple-select field that renders as a group of checkboxes."""
+    widget = widgets.ListWidget(prefix_label=False)
+    option_widget = widgets.CheckboxInput()
+
+
 class UploadForm(FlaskForm):
     """Form for uploading PDF and selecting redaction options."""
 
@@ -35,16 +42,16 @@ class UploadForm(FlaskForm):
         validators=[InputRequired(message="Please select a PDF file to upload.")]
     )
 
-    # 2. PII Types Selection Field
+    # 2. PII Types Selection Field as checkboxes instead of multi-select dropdown
     # Choices will be set dynamically in the Flask route
-    pii_types = SelectMultipleField(
-        'Select PII Types to Redact (Hold Ctrl/Cmd to select multiple)',
+    pii_types = MultiCheckboxField(
+        'Select PII Types to Redact',
         coerce=str  # Important when choices are set dynamically
     )
 
-    # 3. Barcode Types Selection Field
+    # 3. Barcode Types Selection Field as checkboxes
     # Choices will be set dynamically in the Flask route
-    barcode_types = SelectMultipleField(
+    barcode_types = MultiCheckboxField(
         'Select Barcode Types to Redact',
         coerce=str
     )

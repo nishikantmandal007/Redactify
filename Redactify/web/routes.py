@@ -121,10 +121,16 @@ def process_ajax():
     pii_types_selected = request.form.getlist('pii_types')
     keyword_data = request.form.get('keyword_rules', '')
     regex_data = request.form.get('regex_rules', '')
+    barcode_types_to_redact = request.form.getlist('barcode_types')
+    redact_barcodes = request.form.get('redact_barcodes') == 'y'
 
     # Validate PII types against known list
     valid_pii_types = get_pii_choices_from_util()
     pii_types_selected = [ptype for ptype in pii_types_selected if ptype in valid_pii_types]
+    
+    # Always include QR_CODE if redact_barcodes is enabled
+    if redact_barcodes and "QR_CODE" not in pii_types_selected:
+        pii_types_selected.append("QR_CODE")
 
     custom_rules = {}
     if keyword_data:
@@ -140,6 +146,10 @@ def process_ajax():
                 except re.error as regex_err:
                     logging.warning(f"Invalid regex pattern submitted and ignored: {rx_strip} - Error: {regex_err}")
                     pass  # Option to ignore
+    
+    # Include barcode types in custom rules if selected
+    if redact_barcodes and barcode_types_to_redact:
+        custom_rules["barcode_types"] = barcode_types_to_redact
 
     # Queue task
     try:
@@ -287,6 +297,61 @@ def result(task_id):
 def progress(task_id):
     """Display progress page for a specific task."""
     return render_template('progress.html', task_id=task_id)
+
+
+@bp.route('/preview/<task_id>')
+def preview(task_id):
+    """Serves the PDF file for preview in browser (not as attachment)."""
+    try:
+        task = AsyncResult(task_id, app=celery)
+    except Exception as e:
+        logging.error(f"Error creating AsyncResult for task_id {task_id} in /preview: {e}")
+        flash("Invalid Task ID format.", "error")
+        return redirect(url_for('main.index'))
+
+    if not task:
+        flash(f"Unknown task ID: {task_id}", "error")
+        return redirect(url_for('main.index'))
+
+    if task.state == 'SUCCESS':
+        result_info = task.info or {}
+        redacted_filename = result_info.get('result')
+        if redacted_filename:
+            safe_filename = secure_filename(redacted_filename)
+            if not safe_filename:
+                logging.error(f"Invalid result filename format for task {task_id}: {redacted_filename}")
+                flash("Result filename is invalid.", "error")
+                return redirect(url_for('main.index'))
+            try:
+                logging.info(f"Attempting to serve preview file: {safe_filename} from {TEMP_DIR}")
+                full_path = os.path.join(TEMP_DIR, safe_filename)
+                # Basic path traversal check
+                if not os.path.abspath(full_path).startswith(os.path.abspath(TEMP_DIR)):
+                    logging.error(f"Path traversal attempt detected for task {task_id}: {safe_filename}")
+                    raise NotFound()
+
+                # Return file for in-browser viewing (not as attachment)
+                return send_from_directory(TEMP_DIR, safe_filename, as_attachment=False)
+            except FileNotFoundError:
+                logging.error(f"Result file {safe_filename} not found in {TEMP_DIR} for task {task_id}.")
+                flash('Result file not found. It might have been cleaned up or failed to save.', 'error')
+                return redirect(url_for('main.index'))
+            except Exception as e:
+                logging.error(f"Error serving file {safe_filename} for task {task_id}: {e}", exc_info=True)
+                flash('Error serving result file.', 'error')
+                return redirect(url_for('main.index'))
+        else:
+            logging.error(f"Task {task_id} succeeded but no result filename found in task info.")
+            flash('Task completed but result file information is missing.', 'error')
+            return redirect(url_for('main.index'))
+
+    elif task.state == 'FAILURE':
+        flash('Redaction task failed. Cannot download result.', 'error')
+        return redirect(url_for('main.index'))
+    else:
+        # Task not finished, redirect back to progress page
+        flash('Redaction is still in progress. Please wait for completion to download.', 'info')
+        return redirect(url_for('main.progress', task_id=task_id))
 
 
 # File Serving Routes (Serve files from upload/temp, Use with caution)

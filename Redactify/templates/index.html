@@ -56,10 +56,15 @@
                 </div>
 
                 <div class="mb-4">
-                    <label for="pii_types" class="form-label">2. Select PII Types to Redact</label>
-                    {# Use form.pii_types() directly #}
-                    {{ form.pii_types(class="form-select", size=7, title="Hold Ctrl (or Cmd on Mac) to select multiple
-                    types") }}
+                    <label class="form-label">2. Select PII Types to Redact</label>
+                    <div class="pii-checkbox-grid">
+                        {% for subfield in form.pii_types %}
+                        <div class="pii-checkbox-card">
+                            {{ subfield(class="form-check-input") }}
+                            {{ subfield.label(class="form-check-label") }}
+                        </div>
+                        {% endfor %}
+                    </div>
                     <small class="form-text text-muted">Select the kinds of sensitive info to remove.</small>
                 </div>
 
@@ -73,9 +78,15 @@
                     </div>
 
                     <div id="barcode-options" class="mt-2 mb-2">
-                        <label for="barcode_types" class="form-label">Select Barcode Types to Redact:</label>
-                        {{ form.barcode_types(class="form-select", size=5, title="Hold Ctrl (or Cmd on Mac) to select
-                        multiple types") }}
+                        <label class="form-label">Select Barcode Types to Redact:</label>
+                        <div class="barcode-checkbox-grid">
+                            {% for subfield in form.barcode_types %}
+                            <div class="barcode-checkbox-item">
+                                {{ subfield(class="form-check-input") }}
+                                {{ subfield.label(class="form-check-label") }}
+                            </div>
+                            {% endfor %}
+                        </div>
                         <small class="form-text text-muted">Select specific barcode formats to redact.</small>
                     </div>
                 </div>
@@ -136,6 +147,13 @@
                     <i class="material-icons align-middle">download</i>
                     Download Redacted PDF
                 </a>
+                <div id="pdf-preview" class="mt-4">
+                    <h4 class="mb-3">Redacted PDF Preview</h4>
+                    <div class="pdf-container">
+                        <iframe id="pdf-preview-frame"
+                            style="width: 100%; height: 500px; border: 1px solid #dee2e6; border-radius: 4px;"></iframe>
+                    </div>
+                </div>
             </div>
 
             <div class="text-center mt-4">

@@ -20,6 +20,12 @@ def perform_redaction(self, pdf_path, pii_types_selected, custom_rules):
     redacted_pdf_path = None  # Initialize
     original_file_deleted = False
     filename_for_log = os.path.basename(pdf_path) if pdf_path else "unknown_file"
+    
+    # Extract barcode types if present in custom_rules
+    barcode_types_to_redact = None
+    if isinstance(custom_rules, dict) and "barcode_types" in custom_rules:
+        barcode_types_to_redact = custom_rules.pop("barcode_types")
+    
     try:
         self.update_state(state='STARTED', meta={'status': f'Starting redaction for {filename_for_log}...'})
         logging.info(f"Task {self.request.id}: Starting redaction for {filename_for_log}")
@@ -34,9 +40,9 @@ def perform_redaction(self, pdf_path, pii_types_selected, custom_rules):
             raise ValueError(f"Cannot process PDF: Type detected as {pdf_type}")
 
         if pdf_type == 'digital':
-            redacted_pdf_path = redact_digital_pdf(pdf_path, pii_types_selected, custom_rules, self)
+            redacted_pdf_path = redact_digital_pdf(pdf_path, pii_types_selected, custom_rules, self, barcode_types_to_redact)
         else:  # scanned
-            redacted_pdf_path = redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules, self)
+            redacted_pdf_path = redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules, self, barcode_types_to_redact)
 
         if not redacted_pdf_path or not os.path.exists(redacted_pdf_path):
             logging.error(f"Task {self.request.id}: Redaction function completed but output file not found or invalid: {redacted_pdf_path}")
