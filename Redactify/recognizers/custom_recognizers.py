@@ -5,6 +5,21 @@ import logging
 import re
 from typing import List, Optional
 
+# Import centralized entity type definitions
+from .entity_types import (
+    # Entity types
+    INDIA_AADHAAR_ENTITY,
+    INDIA_PAN_ENTITY,
+    INDIA_VOTER_ID_ENTITY,
+    INDIA_PASSPORT_ENTITY,
+    EXAM_IDENTIFIER_ENTITY,
+    # Score constants
+    SCORE_HIGH_CONFIDENCE,
+    SCORE_MEDIUM_HIGH_CONFIDENCE,
+    SCORE_MEDIUM_CONFIDENCE,
+    SCORE_LOW_CONFIDENCE,
+)
+
 # IMPORTANT: Presidio imports might vary slightly by version.
 # Ensure these match your installed presidio-analyzer version.
 try:
@@ -18,22 +33,8 @@ except ImportError as import_err:
     PatternRecognizer = type('PatternRecognizer', (object,), {})
     EntityRecognizer = type('EntityRecognizer', (object,), {})
 
-# --- Configuration for Scores (Adjust as needed) ---
-SCORE_HIGH_CONFIDENCE = 0.9  # PAN structure + checksum (if enabled and valid)
-SCORE_MEDIUM_HIGH_CONFIDENCE = 0.75  # Aadhaar format (no checksum), Specific App ID, State-Prefixed RollNo
-SCORE_MEDIUM_CONFIDENCE = 0.65  # More variable formats (Voter ID examples), Mobile (use cautiously)
-SCORE_LOW_CONFIDENCE = 0.4  # Broad numeric patterns (like generic roll no) - high FP risk
-
-# --- Entity Type Constants ---
-# Using constants makes it easier to manage entity names consistently
-INDIA_AADHAAR_ENTITY = "INDIA_AADHAAR_NUMBER"
-INDIA_PAN_ENTITY = "INDIA_PAN_NUMBER"
-INDIA_MOBILE_ENTITY = "INDIA_MOBILE_NUMBER"  # Optional, might overlap with default
-INDIA_VOTER_ID_ENTITY = "INDIA_VOTER_ID"
-INDIA_PASSPORT_ENTITY = "INDIA_PASSPORT"  # Added new entity for Indian Passport
-EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER"  # Covers Roll No, App ID etc.
-
 logger = logging.getLogger(__name__)
+
 # Ensure logger is configured (e.g., in app.py or here)
 # Basic config if run standalone for testing, but Flask logger is preferred
 if not logger.hasHandlers():
@@ -53,7 +54,6 @@ def _validate_pan_checksum(pan: str) -> bool:
     is_valid_checksum = True
     # --- End Placeholder ---
     return is_valid_checksum
-
 
 # --- Custom Python Recognizer Class for PAN (with Checksum Option) ---
 class IndiaPanChecksumRecognizer(EntityRecognizer):
@@ -119,7 +119,7 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
 
             # Create result if pattern matches and checksum (if checked) is valid
             result = RecognizerResult(
-                entity_type=self.SUPPORTED_ENTITIES[0],
+                entity_type=self.supported_entities[0],
                 start=start,
                 end=end,
                 score=score,
@@ -135,7 +135,6 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
             logger.debug(f"{self.name}: Found {'valid ' if checksum_valid else ''}PAN{' (Checksum disabled)' if not self.check_checksum else ''}: {pan_candidate} at [{start}:{end}] score={score:.2f}")
 
         return results
-
 
 # --- Pattern Recognizers (Simpler format matching) ---
 
@@ -272,7 +271,6 @@ def get_custom_pii_entity_names():
             # Add the first supported entity (standard practice for these recognizers)
             entity_names.add(rec.supported_entities[0])
     return sorted(list(entity_names))
-
 
 # Log final list being exported for verification
 logger.info(f"Exporting {len(custom_recognizer_list)} custom recognizers with entities: {get_custom_pii_entity_names()}")
