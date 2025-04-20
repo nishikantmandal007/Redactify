@@ -89,6 +89,11 @@ textarea.form-control {
     display: flex;
     align-items: center;
     margin-bottom: 0.5rem;
+    position: relative;
+    height: 40px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    overflow: hidden;
 }
 
 .file-input-wrapper input[type=file] {
@@ -99,18 +104,19 @@ textarea.form-control {
     cursor: pointer;
     height: 100%;
     width: 100%;
+    z-index: 5;
 }
 
 .file-input-button {
     background-color: #f1f3f4;
-    border: 1px solid #dadce0;
-    border-radius: 4px;
+    border-right: 1px solid #dadce0;
     padding: 8px 16px;
-    cursor: pointer;
     display: inline-flex;
     align-items: center;
-    margin-right: 12px;
     transition: background-color 0.2s;
+    position: relative;
+    z-index: 1;
+    height: 100%;
 }
 
 .file-input-button:hover {
@@ -128,6 +134,7 @@ textarea.form-control {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 250px;
+    margin-left: 12px;
 }
 
 /* Button styling */

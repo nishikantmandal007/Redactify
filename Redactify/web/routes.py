@@ -3,7 +3,9 @@
 
 import os
 import re
+import time
 import logging
+import threading
 from flask import (
     Blueprint, render_template, redirect, url_for, flash,
     send_from_directory, request, jsonify, current_app
@@ -23,6 +25,40 @@ from .forms import UploadForm
 
 # Create a blueprint for the web routes
 bp = Blueprint('main', __name__)
+
+# Request deduplication - track recent requests to avoid duplicates
+_request_lock = threading.Lock()
+_recent_requests = {}  # Format: {"request_key": timestamp}
+_REQUEST_DEBOUNCE_SECONDS = 2  # Ignore duplicate requests within this timeframe
+
+def is_duplicate_request(key, client_ip=None, debounce_seconds=None):
+    """Check if a request is a duplicate (called recently)"""
+    if debounce_seconds is None:
+        debounce_seconds = _REQUEST_DEBOUNCE_SECONDS
+        
+    now = time.time()
+    
+    # If client_ip is provided, include it in the key for better uniqueness
+    if client_ip:
+        key = f"{client_ip}:{key}"
+    
+    with _request_lock:
+        # Clean up old entries first
+        expired_keys = [k for k, timestamp in _recent_requests.items() 
+                       if now - timestamp > debounce_seconds]
+        for k in expired_keys:
+            _recent_requests.pop(k, None)
+        
+        # Check if this is a duplicate request
+        if key in _recent_requests:
+            time_diff = now - _recent_requests[key]
+            logging.warning(f"Detected duplicate request: {key} (within {time_diff:.3f}s)")
+            return True
+
+        # Add this request timestamp (inside the lock to prevent race conditions)
+        _recent_requests[key] = now
+            
+    return False
 
 # --- Helper Function ---
 def allowed_file(filename):
@@ -66,55 +102,57 @@ def index():
     return render_template('index.html', form=form, max_size_mb=MAX_FILE_SIZE_MB, TEMP_FILE_MAX_AGE_SECONDS=TEMP_FILE_MAX_AGE_SECONDS)
 
 
-@bp.route('/process_pdf', methods=['POST'])
+@bp.route('/process', methods=['POST'])
 def process_ajax():
     """Handles AJAX form submission, saves file, queues Celery task."""
     # File handling first
-    if 'pdf_file' not in request.files:
-        logging.warning("AJAX POST /process_pdf: No file part in request.files.")
+    if 'file' not in request.files:
+        logging.warning("AJAX POST /process: No file part in request.files.")
         return jsonify({'error': 'No file part in the request.'}), 400
 
-    pdf_file = request.files['pdf_file']
+    uploaded_file = request.files['file']
 
-    if pdf_file.filename == '':
-        logging.warning("AJAX POST /process_pdf: No filename provided.")
+    if uploaded_file.filename == '':
+        logging.warning("AJAX POST /process: No filename provided.")
         return jsonify({'error': 'No file selected.'}), 400
 
-    # Input validation
-    if not pdf_file or not pdf_file.filename.lower().endswith('.pdf'):
-        logging.warning(f"AJAX POST /process_pdf: Invalid file type or empty file (Direct Check): {pdf_file.filename}")
-        return jsonify({'error': 'Invalid file type. Please upload a PDF.'}), 400
+    # Get file extension
+    _, file_extension = os.path.splitext(uploaded_file.filename.lower())
+
+    # Input validation for allowed file types
+    allowed_extensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']
+    if file_extension not in allowed_extensions:
+        logging.warning(f"AJAX POST /process: Invalid file type: {file_extension}")
+        return jsonify({'error': f'Invalid file type. Please upload a PDF or image file (supported types: {", ".join(allowed_extensions)})'}), 400
 
     # Secure filename and path
-    filename = secure_filename(pdf_file.filename)
+    filename = secure_filename(uploaded_file.filename)
     if not filename:
-        logging.warning("AJAX POST /process_pdf: Invalid secure filename generated.")
+        logging.warning("AJAX POST /process: Invalid secure filename generated.")
         return jsonify({'error': 'Invalid filename.'}), 400
 
-    pdf_path = os.path.join(UPLOAD_DIR, filename)  # Use UPLOAD_DIR from config
+    upload_path = os.path.join(UPLOAD_DIR, filename)  # Use UPLOAD_DIR from config
 
-    # Avoid overwriting - generate unique name if exists
-    counter = 1
-    base, ext = os.path.splitext(pdf_path)
-    while os.path.exists(pdf_path):
-        pdf_path = f"{base}_{counter}{ext}"
-        filename = os.path.basename(pdf_path)  # Update filename if changed
-        counter += 1
-        if counter > 100:  # Safety break
-            logging.error("AJAX POST /process_pdf: Could not generate unique filename.")
-            return jsonify({'error': 'Could not save file, name conflict.'}), 500
+    # Instead of renaming, overwrite any existing file with the same name
+    if os.path.exists(upload_path):
+        try:
+            os.remove(upload_path)
+            logging.info(f"AJAX POST /process: Removed existing file at {upload_path}")
+        except OSError as del_err:
+            logging.warning(f"Could not delete existing file at {upload_path}: {del_err}")
+            # Continue anyway - the save will attempt to overwrite
 
     # Try saving the file
     try:
-        pdf_file.save(pdf_path)
-        logging.info(f"AJAX POST /process_pdf: File saved to {pdf_path}")
+        uploaded_file.save(upload_path)
+        logging.info(f"AJAX POST /process: File saved to {upload_path}")
     except RequestEntityTooLarge:
         # Caught by error handler, but log here too
-        logging.warning(f"AJAX POST /process_pdf: File too large: {filename}")
+        logging.warning(f"AJAX POST /process: File too large: {filename}")
         # The error handler will return the response
         raise  # Re-raise to trigger the handler
     except Exception as e:
-        logging.error(f"AJAX POST /process_pdf: Failed to save uploaded file {filename}: {e}", exc_info=True)
+        logging.error(f"AJAX POST /process: Failed to save uploaded file {filename}: {e}", exc_info=True)
         return jsonify({'error': f'Error saving file: {e}'}), 500
 
     # Get other form data
@@ -151,19 +189,25 @@ def process_ajax():
     if redact_barcodes and barcode_types_to_redact:
         custom_rules["barcode_types"] = barcode_types_to_redact
 
+    # Generate a unique request key based on file and form data
+    request_key = f"{filename}-{pii_types_selected}-{custom_rules}"
+    client_ip = request.remote_addr
+    if is_duplicate_request(request_key, client_ip):
+        return jsonify({'error': 'Duplicate request detected. Please wait a moment before retrying.'}), 429
+
     # Queue task
     try:
-        task = perform_redaction.delay(pdf_path, pii_types_selected, custom_rules)
-        logging.info(f"AJAX POST /process_pdf: Task {task.id} queued for file {filename}")
+        task = perform_redaction.delay(upload_path, pii_types_selected, custom_rules)
+        logging.info(f"AJAX POST /process: Task {task.id} queued for file {filename}")
         return jsonify({'task_id': task.id}), 202
     except Exception as e:
-        logging.error(f"AJAX POST /process_pdf: Failed to queue task for {filename}: {e}", exc_info=True)
+        logging.error(f"AJAX POST /process: Failed to queue task for {filename}: {e}", exc_info=True)
         # Clean up saved file if queuing fails
-        if os.path.exists(pdf_path):
+        if os.path.exists(upload_path):
             try:
-                os.remove(pdf_path)
+                os.remove(upload_path)
             except OSError as del_err:
-                logging.warning(f"Could not delete file {pdf_path} after task queue failure: {del_err}")
+                logging.warning(f"Could not delete file {upload_path} after task queue failure: {del_err}")
         return jsonify({'error': f'Error queueing redaction task. Is the background service running?'}), 500
 
 
@@ -330,8 +374,12 @@ def preview(task_id):
                     logging.error(f"Path traversal attempt detected for task {task_id}: {safe_filename}")
                     raise NotFound()
 
-                # Return file for in-browser viewing (not as attachment)
-                return send_from_directory(TEMP_DIR, safe_filename, as_attachment=False)
+                # Explicitly set PDF MIME type if file is PDF
+                if safe_filename.lower().endswith('.pdf'):
+                    from flask import send_file
+                    return send_file(full_path, mimetype='application/pdf', as_attachment=False)
+                else:
+                    return send_from_directory(TEMP_DIR, safe_filename, as_attachment=False)
             except FileNotFoundError:
                 logging.error(f"Result file {safe_filename} not found in {TEMP_DIR} for task {task_id}.")
                 flash('Result file not found. It might have been cleaned up or failed to save.', 'error')
@@ -388,22 +436,20 @@ def temp_file(filename):
 @bp.route('/cleanup', methods=['POST'])
 def trigger_cleanup():
     # !! IMPORTANT: Secure this endpoint in production !!
-    form = UploadForm()  # Use form for CSRF token validation
-    # This relies on the CSRF token being included in the POST request,
-    # which the form in index.html should do.
-    if form.validate_on_submit():
+    # We only need to validate the CSRF token, not the entire form
+    if request.form.get('csrf_token'):
         logging.info("Manual cleanup triggered via /cleanup endpoint.")
         try:
-            cleaned_count = cleanup_temp_files()
-            flash(f"Cleanup process completed. Removed {cleaned_count} old files.", "success")
+            cleaned_count = cleanup_temp_files(force=True)  # Use force=True to clean all files regardless of age
+            flash(f"Cleanup process completed. Removed {cleaned_count} files.", "success")
         except Exception as e:
             logging.error(f"Error during manual cleanup: {e}", exc_info=True)
             flash(f"Cleanup failed: {e}", "error")
     else:
         # Log CSRF error or other potential form validation errors
-        csrf_error = form.csrf_token.errors if hasattr(form, 'csrf_token') else []
-        logging.warning(f"CSRF validation failed or other error on cleanup POST. Errors: {csrf_error} / {form.errors}")
+        logging.warning(f"CSRF validation failed on cleanup POST.")
         flash("Could not validate cleanup request.", "error")
+    
     return redirect(url_for('main.index'))
 
 

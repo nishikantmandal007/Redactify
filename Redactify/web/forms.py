@@ -10,20 +10,18 @@ import re  # Import re for custom validator
 # Custom validator to check if each line is a valid regex
 def validate_each_line_regex(form, field):
     """Checks if each non-empty line in the TextAreaField is a valid regex."""
-    if field.data:  # Only validate if there's data
-        lines = field.data.splitlines()
-        invalid_lines = []
-        for i, line in enumerate(lines):
-            stripped_line = line.strip()
-            if stripped_line:  # Ignore empty lines
-                try:
-                    re.compile(stripped_line)  # Try to compile the regex
-                except re.error as e:
-                    invalid_lines.append(f"L{i+1}: '{stripped_line[:30]}{'...' if len(stripped_line)>30 else ''}' ({e})")
-        if invalid_lines:
-            # Raise ValidationError if any line is invalid
-            error_message = "Invalid regex pattern(s) found: " + "; ".join(invalid_lines)
-            raise ValidationError(error_message)
+    if not field.data:
+        return  # No validation needed if empty
+
+    lines = field.data.splitlines()
+    for line_num, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line:  # Skip empty lines
+            continue
+        try:
+            re.compile(line)
+        except re.error as e:
+            raise ValidationError(f'Invalid regex pattern on line {line_num}: {e}')
 
 
 # Custom widget for multi-checkbox rendering
@@ -36,10 +34,10 @@ class MultiCheckboxField(SelectMultipleField):
 class UploadForm(FlaskForm):
     """Form for uploading PDF and selecting redaction options."""
 
-    # 1. File Upload Field
-    pdf_file = FileField(
-        'Upload PDF File',
-        validators=[InputRequired(message="Please select a PDF file to upload.")]
+    # 1. File Upload Field - renamed from pdf_file to file
+    file = FileField(
+        'Upload File',
+        validators=[InputRequired(message="Please select a file to upload.")]
     )
 
     # 2. PII Types Selection Field as checkboxes instead of multi-select dropdown

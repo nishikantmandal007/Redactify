@@ -26,7 +26,7 @@ def create_app(config=None):
         logging.warning("SECURITY WARNING: Using default insecure FLASK_SECRET_KEY. Set FLASK_SECRET_KEY environment variable.")
 
     app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_BYTES
-    app.config['UPLOAD_EXTENSIONS'] = ['.pdf']  # Allowed extensions
+    app.config['UPLOAD_EXTENSIONS'] = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']  # PDF and image extensions
     
     # Initialize extensions
     bootstrap = Bootstrap(app)

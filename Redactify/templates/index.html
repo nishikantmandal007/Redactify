@@ -1,19 +1,11 @@
-{% extends "bootstrap/base.html" %}
+{% extends "base.html" %}
 {% import "bootstrap/wtf.html" as wtf %}
-
-{% block title %}SecurePDF Redactor{% endblock %}
-
-{% block styles %}
-{{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="text-center mt-4 mb-4">
-        <h1>SecurePDF <span style="font-weight: 500;">Redactor</span></h1>
-        <p class="lead">Safely remove sensitive information from your PDF files.</p>
+        <h1>Redactify <span style="font-weight: 500;">Document & Image Redactor</span></h1>
+        <p class="lead">Safely remove sensitive information from your PDF files and images.</p>
     </div>
 
     <!-- Flash Messages Area -->
@@ -41,18 +33,17 @@
                 {{ form.csrf_token }}
 
                 <div class="mb-4">
-                    <label for="pdf_file" class="form-label">1. Choose PDF File</label>
+                    <label for="file" class="form-label">1. Choose File</label>
                     <div class="file-input-wrapper">
                         <span class="file-input-button">
                             <i class="material-icons">file_upload</i> Browse File...
                         </span>
-                        {# Ensure the actual file input has the id="pdf_file" #}
-                        {{ form.pdf_file(class="form-control", style="opacity: 0; position: absolute; left: -9999px;")
-                        }}
+                        {{ form.file(class="form-control", id="file", style="opacity: 0; position: absolute; top: 0;
+                        left: 0; width: 100%; height: 100%; z-index: 10; cursor: pointer;") }}
                         <span id="selected-filename">No file chosen</span>
                     </div>
-                    <small class="form-text text-muted d-block">Maximum file size: {{ max_size_mb }} MB. Allowed type:
-                        .pdf</small>
+                    <small class="form-text text-muted d-block">Maximum file size: {{ max_size_mb }} MB. Allowed types:
+                        .pdf, .jpg, .jpeg, .png, .gif, .bmp, .tiff</small>
                 </div>
 
                 <div class="mb-4">
@@ -129,7 +120,7 @@
 
         <!-- === Progress Zone (Initially Hidden) === -->
         <div id="progress-zone" style="display: none;">
-            <h3 class="text-center mb-3">Processing PDF...</h3>
+            <h3 class="text-center mb-3">Processing File...</h3>
 
             <div id="status-message" class="alert alert-info" role="alert">
                 <i class="material-icons align-middle">info</i> Initializing...
@@ -145,13 +136,15 @@
             <div id="result-link" class="text-center mt-4" style="display: none;">
                 <a href="#" id="download-button" class="btn btn-success btn-lg">
                     <i class="material-icons align-middle">download</i>
-                    Download Redacted PDF
+                    Download Redacted File
                 </a>
                 <div id="pdf-preview" class="mt-4">
-                    <h4 class="mb-3">Redacted PDF Preview</h4>
+                    <h4 class="mb-3" id="preview-header-text">Redacted File Preview</h4>
                     <div class="pdf-container">
                         <iframe id="pdf-preview-frame"
-                            style="width: 100%; height: 500px; border: 1px solid #dee2e6; border-radius: 4px;"></iframe>
+                            style="width: 100%; height: 500px; border: 1px solid #dee2e6; border-radius: 4px; display: none;"></iframe>
+                        <img id="image-preview-frame"
+                            style="width: 100%; max-height: 500px; border: 1px solid #dee2e6; border-radius: 4px; object-fit: contain; display: none;" />
                     </div>
                 </div>
             </div>
@@ -188,25 +181,4 @@
 {% block scripts %}
 {{ super() }} {# Includes Bootstrap JS #}
 <script src="{{ url_for('static', filename='script.js') }}"></script>
-<script>
-    // Toggle barcode options based on the redact_barcodes checkbox
-    document.addEventListener('DOMContentLoaded', function () {
-        const redactBarcodesCheckbox = document.getElementById('redact_barcodes');
-        const barcodeOptions = document.getElementById('barcode-options');
-
-        function updateBarcodeOptionsVisibility() {
-            if (redactBarcodesCheckbox.checked) {
-                barcodeOptions.style.display = 'block';
-            } else {
-                barcodeOptions.style.display = 'none';
-            }
-        }
-
-        // Initial state
-        updateBarcodeOptionsVisibility();
-
-        // Add event listener
-        redactBarcodesCheckbox.addEventListener('change', updateBarcodeOptionsVisibility);
-    });
-</script>
 {% endblock %}

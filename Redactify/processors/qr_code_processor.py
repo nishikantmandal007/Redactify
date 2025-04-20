@@ -46,6 +46,7 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
     """
     # Create a copy of the image to avoid modifying the original
     redacted_image = image_array.copy()
+    img_height, img_width = image_array.shape[:2]
     
     # Detect barcodes and QR codes
     try:
@@ -70,8 +71,15 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
             padding = 10
             left = max(0, left - padding)
             top = max(0, top - padding)
-            right = min(image_array.shape[1], left + width + 2*padding)
-            bottom = min(image_array.shape[0], top + height + 2*padding)
+            right = min(img_width, left + width + 2*padding)
+            bottom = min(img_height, top + height + 2*padding)
+            
+            # Skip if bounding box is too large (e.g., >80% of image area)
+            bbox_area = (right - left) * (bottom - top)
+            img_area = img_width * img_height
+            if bbox_area / img_area > 0.8:
+                logging.warning(f"Skipping barcode redaction: bounding box too large ({bbox_area/img_area:.2%} of image)")
+                continue
             
             # Draw black rectangle over barcode
             cv2.rectangle(redacted_image, (left, top), (right, bottom), (0, 0, 0), -1)
