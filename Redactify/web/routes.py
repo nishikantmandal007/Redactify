@@ -19,7 +19,7 @@ from ..core.config import UPLOAD_DIR, TEMP_DIR, MAX_FILE_SIZE_BYTES, MAX_FILE_SI
 from ..services.celery_service import celery
 from ..services.tasks import perform_redaction
 from ..services.cleanup import cleanup_temp_files
-from ..core.analyzers import get_pii_types as get_pii_choices_from_util
+from ..core.analyzers import get_pii_types as get_pii_choices_from_util, get_pii_friendly_names
 from ..processors.qr_code_processor import get_supported_barcode_types
 from .forms import UploadForm
 
@@ -84,10 +84,33 @@ def index():
     form = UploadForm()
     # Dynamically load choices for PII types
     try:
-        pii_choices_list = get_pii_choices_from_util()  # Gets defaults + custom + QR_CODE
-        # Format choices for the WTForms SelectMultipleField
-        form.pii_types.choices = [(ptype, ptype.replace('_', ' ').title()) for ptype in pii_choices_list]
-        logging.debug(f"Populated PII choices in index route: {form.pii_types.choices}")
+        # Get all available PII types - include both common and advanced types
+        common_pii_types_list = get_pii_choices_from_util(advanced=False)
+        advanced_pii_types_list = get_pii_choices_from_util(advanced=True)
+        all_pii_types = common_pii_types_list + advanced_pii_types_list
+        
+        # Get common PII types with user-friendly names (India-specific + common)
+        common_pii_types = get_pii_friendly_names(advanced=False)
+        
+        # Get advanced PII types with user-friendly names
+        advanced_pii_types = get_pii_friendly_names(advanced=True)
+        
+        # Filter the common types to only include those that exist in all_pii_types
+        common_pii_choices = [(pii_id, friendly_name) for pii_id, friendly_name in common_pii_types 
+                             if pii_id in all_pii_types]
+        
+        # Add common PII types to the form
+        form.common_pii_types.choices = common_pii_choices
+        
+        # Filter the advanced types to only include those that exist in all_pii_types
+        advanced_pii_choices = [(pii_id, friendly_name) for pii_id, friendly_name in advanced_pii_types
+                               if pii_id in all_pii_types]
+        
+        # Add advanced PII types to the form
+        form.advanced_pii_types.choices = advanced_pii_choices
+        
+        logging.debug(f"Populated common PII choices: {form.common_pii_types.choices}")
+        logging.debug(f"Populated advanced PII choices: {form.advanced_pii_types.choices}")
         
         # Dynamically load barcode types
         barcode_types_dict = get_supported_barcode_types()
@@ -96,7 +119,8 @@ def index():
     except Exception as e:
         logging.error(f"Failed to load choices: {e}", exc_info=True)
         flash("Error loading options.", "error")
-        form.pii_types.choices = []  # Set empty list on error
+        form.common_pii_types.choices = []  # Set empty list on error
+        form.advanced_pii_types.choices = []  # Set empty list on error
         form.barcode_types.choices = []  # Set empty list on error
 
     return render_template('index.html', form=form, max_size_mb=MAX_FILE_SIZE_MB, TEMP_FILE_MAX_AGE_SECONDS=TEMP_FILE_MAX_AGE_SECONDS)
@@ -155,8 +179,11 @@ def process_ajax():
         logging.error(f"AJAX POST /process: Failed to save uploaded file {filename}: {e}", exc_info=True)
         return jsonify({'error': f'Error saving file: {e}'}), 500
 
-    # Get other form data
-    pii_types_selected = request.form.getlist('pii_types')
+    # Get other form data - combine both common and advanced PII types
+    common_pii_selected = request.form.getlist('common_pii_types')
+    advanced_pii_selected = request.form.getlist('advanced_pii_types')
+    pii_types_selected = common_pii_selected + advanced_pii_selected
+    
     keyword_data = request.form.get('keyword_rules', '')
     regex_data = request.form.get('regex_rules', '')
     barcode_types_to_redact = request.form.getlist('barcode_types')

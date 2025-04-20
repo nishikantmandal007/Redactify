@@ -7,8 +7,39 @@ document.addEventListener('DOMContentLoaded', function () {
     const loadingSpinner = document.getElementById('loading-spinner');
     const fileInput = document.getElementById('file');
     const selectedFilenameSpan = document.getElementById('selected-filename');
-    const fileInputWrapper = document.querySelector('.file-input-wrapper');
-    const fileInputButton = document.querySelector('.file-input-button');
+    const fileInputWrapper = document.querySelector('.input-group');
+
+    // --- Advanced Options Toggle ---
+    const advancedOptionsToggle = document.getElementById('advanced-options-toggle');
+    const advancedOptionsSection = document.getElementById('advanced-options-section');
+
+    if (advancedOptionsToggle && advancedOptionsSection) {
+        advancedOptionsToggle.addEventListener('click', function () {
+            // Toggle icon rotation
+            const icon = advancedOptionsToggle.querySelector('i');
+            if (icon) {
+                icon.style.transform = icon.style.transform === 'rotate(180deg)' ? '' : 'rotate(180deg)';
+            }
+
+            // Toggle section visibility using Bootstrap classes
+            advancedOptionsSection.classList.toggle('d-none');
+
+            // Update button text
+            const toggleText = advancedOptionsToggle.querySelector('span');
+            if (toggleText) {
+                toggleText.textContent = advancedOptionsSection.classList.contains('d-none') ?
+                    'Show Advanced Options' : 'Hide Advanced Options';
+            }
+
+            // Force redraw of the section (helps with display issues)
+            if (!advancedOptionsSection.classList.contains('d-none')) {
+                advancedOptionsSection.style.opacity = '0.99';
+                setTimeout(() => {
+                    advancedOptionsSection.style.opacity = '1';
+                }, 0);
+            }
+        });
+    }
 
     // --- Barcode Options Toggle ---
     const redactBarcodesCheckbox = document.getElementById('redact_barcodes');
@@ -16,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (redactBarcodesCheckbox && barcodeOptions) {
         function updateBarcodeOptionsVisibility() {
-            barcodeOptions.style.display = redactBarcodesCheckbox.checked ? 'block' : 'none';
+            barcodeOptions.classList.toggle('d-none', !redactBarcodesCheckbox.checked);
         }
 
         // Initial state
@@ -28,15 +59,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Improve file input handling ---
     if (fileInputWrapper && fileInput) {
-        // Make the whole wrapper clickable
-        fileInputWrapper.addEventListener('click', function (e) {
-            if (e.target !== fileInput) {
-                e.preventDefault();
-                fileInput.click();
-            }
-        });
-
-        // Fix file selection display
+        // Update filename display
         fileInput.addEventListener('change', function () {
             const file = this.files.length > 0 ? this.files[0] : null;
             selectedFilenameSpan.textContent = file ? file.name : 'No file chosen';
@@ -52,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentFileType = null;
                     // Alert user about invalid file type
                     statusMessageDiv.className = 'alert alert-warning';
-                    statusMessageDiv.textContent = 'Please select a PDF or image file (.pdf, .jpg, .jpeg, .png, .gif, .bmp, .tiff)';
+                    statusMessageDiv.innerHTML = '<i class="material-icons-round me-2">warning</i> Please select a PDF or image file (.pdf, .jpg, .jpeg, .png, .gif, .bmp, .tiff)';
                     showElement(statusMessageDiv);
                 }
             } else {
@@ -85,44 +108,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Event Listeners ---
 
-    // Update filename display and detect file type on file selection
-    if (fileInput && selectedFilenameSpan) {
-        fileInput.addEventListener('change', function () {
-            const file = this.files.length > 0 ? this.files[0] : null;
-            selectedFilenameSpan.textContent = file ? file.name : 'No file chosen';
-
-            // Detect file type for later use
-            if (file) {
-                const fileName = file.name.toLowerCase();
-                if (fileName.endsWith('.pdf')) {
-                    currentFileType = 'pdf';
-                } else if (fileName.match(/\.(jpe?g|png|gif|bmp|tiff?)$/)) {
-                    currentFileType = 'image';
-                } else {
-                    currentFileType = null;
-                }
-            } else {
-                currentFileType = null;
-            }
-        });
-    }
-
     // Toggle file preview
     if (togglePreviewBtn) {
         togglePreviewBtn.addEventListener('click', function () {
-            if (pdfPreviewDiv.style.display === 'none') {
+            const isHidden = pdfPreviewDiv.classList.contains('d-none');
+
+            if (isHidden) {
                 // Show preview
-                pdfPreviewDiv.style.display = 'block';
+                pdfPreviewDiv.classList.remove('d-none');
                 togglePreviewBtn.querySelector('span').textContent = 'Hide Preview';
                 togglePreviewBtn.querySelector('i').textContent = 'visibility_off';
 
                 // Load file into iframe if not already loaded
-                if (!pdfPreviewFrame.src) {
+                if (!pdfPreviewFrame.src && downloadButton.href) {
                     pdfPreviewFrame.src = downloadButton.href;
                 }
             } else {
                 // Hide preview
-                pdfPreviewDiv.style.display = 'none';
+                pdfPreviewDiv.classList.add('d-none');
                 togglePreviewBtn.querySelector('span').textContent = 'Preview File';
                 togglePreviewBtn.querySelector('i').textContent = 'visibility';
             }
@@ -148,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Show loading state
             showLoading(true);
-            statusMessageDiv.textContent = 'Uploading and queuing task...';
+            statusMessageDiv.innerHTML = '<i class="material-icons-round me-2">cloud_upload</i> Uploading and queuing task...';
             statusMessageDiv.className = 'alert alert-info'; // Set initial class
             showElement(statusMessageDiv); // Make sure it's visible if previously hidden
 
@@ -188,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (responseData.error) {
                     // Handle error from server
                     statusMessageDiv.className = 'alert alert-danger';
-                    statusMessageDiv.textContent = responseData.error;
+                    statusMessageDiv.innerHTML = `<i class="material-icons-round me-2">error</i> ${responseData.error}`;
                     showLoading(false);
                 } else if (responseData.task_id) {
                     // Success - hide input, show progress
@@ -206,14 +209,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else {
                     // Unexpected response format
                     statusMessageDiv.className = 'alert alert-warning';
-                    statusMessageDiv.textContent = 'Unexpected server response. Please try again.';
+                    statusMessageDiv.innerHTML = '<i class="material-icons-round me-2">warning</i> Unexpected server response. Please try again.';
                     showLoading(false);
                 }
             } catch (error) {
                 // Network or other error
                 console.error('Form submission error:', error);
                 statusMessageDiv.className = 'alert alert-danger';
-                statusMessageDiv.textContent = 'Error: ' + error.message;
+                statusMessageDiv.innerHTML = `<i class="material-icons-round me-2">error</i> Error: ${error.message}`;
                 showLoading(false);
             } finally {
                 submitButton.disabled = false;
@@ -249,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     clearInterval(pollIntervalId);
                     pollIntervalId = null;
                     statusMessageDiv.className = 'alert alert-danger';
-                    statusMessageDiv.textContent = `Error checking task status: ${error.message}`;
+                    statusMessageDiv.innerHTML = `<i class="material-icons-round me-2">error</i> Error checking task status: ${error.message}`;
                 });
         }, 1000); // Poll every 1 second
     }
@@ -262,15 +265,17 @@ document.addEventListener('DOMContentLoaded', function () {
             progressText.textContent = `${data.progress}%`;
         }
 
-        // Update status message
+        // Update status message text (preserve icon)
         if (statusMessageDiv) {
-            statusMessageDiv.textContent = data.status;
+            const existingIcon = statusMessageDiv.querySelector('i')?.outerHTML || '';
+            statusMessageDiv.innerHTML = existingIcon + ' ' + data.status;
         }
 
         // Based on state, update UI
         if (data.state === 'SUCCESS') {
             clearInterval(pollIntervalId);
             pollIntervalId = null;
+
             // Complete the progress bar
             if (progressBar) {
                 progressBar.style.width = '100%';
@@ -278,11 +283,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
                 progressBar.classList.add('bg-success');
             }
+
             if (progressText) progressText.textContent = '100%';
-            // Show success message
+
+            // Show success message with check icon
             if (statusMessageDiv) {
                 statusMessageDiv.className = 'alert alert-success';
-                statusMessageDiv.innerHTML = `<i class="material-icons align-middle">check_circle</i> ${data.status}`;
+                statusMessageDiv.innerHTML = `<i class="material-icons-round me-2">check_circle</i> ${data.status}`;
             }
 
             // Show download link if result filename is provided
@@ -298,25 +305,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 const isImage = fileExt.match(/\.(jpe?g|png|gif|bmp|tiff?)$/);
                 const isPdf = fileExt.endsWith('.pdf');
 
-                // Always show the preview container
-                if (pdfPreviewDiv) {
-                    pdfPreviewDiv.style.display = 'block';
-                }
+                if (pdfPreviewFrame && isPdf) {
+                    pdfPreviewFrame.classList.remove('d-none');
+                    pdfPreviewFrame.src = `/preview/${taskId}`;
 
-                // Always use the iframe for both PDFs and images
-                if (isPdf || isImage) {
-                    if (pdfPreviewFrame) {
-                        pdfPreviewFrame.src = `/preview/${taskId}`;
-                        pdfPreviewFrame.style.display = 'block';
-                    }
                     if (imagePreviewFrame) {
-                        imagePreviewFrame.style.display = 'none';
-                        imagePreviewFrame.src = '';
+                        imagePreviewFrame.classList.add('d-none');
                     }
-                } else {
-                    // Hide both if unknown type
-                    if (pdfPreviewFrame) pdfPreviewFrame.style.display = 'none';
-                    if (imagePreviewFrame) imagePreviewFrame.style.display = 'none';
+                } else if (imagePreviewFrame && isImage) {
+                    imagePreviewFrame.classList.remove('d-none');
+                    imagePreviewFrame.src = `/preview/${taskId}`;
+
+                    if (pdfPreviewFrame) {
+                        pdfPreviewFrame.classList.add('d-none');
+                    }
                 }
             }
         } else if (data.state === 'FAILURE') {
@@ -330,7 +332,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Show error message
             if (statusMessageDiv) {
                 statusMessageDiv.className = 'alert alert-danger';
-                statusMessageDiv.innerHTML = `<i class="material-icons align-middle">error</i> ${data.status}`;
+                statusMessageDiv.innerHTML = `<i class="material-icons-round me-2">error</i> ${data.status}`;
             }
         }
         // Otherwise keep polling...
@@ -374,7 +376,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Reset preview
         if (pdfPreviewDiv) {
-            pdfPreviewDiv.style.display = 'none';
+            pdfPreviewDiv.classList.add('d-none');
         }
         if (togglePreviewBtn) {
             togglePreviewBtn.querySelector('span').textContent = 'Preview File';
@@ -382,16 +384,36 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (pdfPreviewFrame) {
             pdfPreviewFrame.src = '';
+            pdfPreviewFrame.classList.add('d-none');
+        }
+        if (imagePreviewFrame) {
+            imagePreviewFrame.src = '';
+            imagePreviewFrame.classList.add('d-none');
+        }
+
+        // Reset advanced options if open
+        if (advancedOptionsToggle && advancedOptionsSection) {
+            if (!advancedOptionsSection.classList.contains('d-none')) {
+                advancedOptionsSection.classList.add('d-none');
+                const icon = advancedOptionsToggle.querySelector('i');
+                if (icon) icon.style.transform = '';
+
+                const toggleText = advancedOptionsToggle.querySelector('span');
+                if (toggleText) toggleText.textContent = 'Show Advanced Options';
+            }
         }
     }
 
     // --- Utility Functions ---
     function showElement(element) {
-        if (element) element.style.display = 'block';
+        if (element) {
+            element.classList.remove('d-none');
+        }
     }
 
     function hideElement(element) {
-        if (element) element.style.display = 'none';
+        if (element) {
+            element.classList.add('d-none');
+        }
     }
-
 });

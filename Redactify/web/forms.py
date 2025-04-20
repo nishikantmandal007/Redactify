@@ -40,39 +40,44 @@ class UploadForm(FlaskForm):
         validators=[InputRequired(message="Please select a file to upload.")]
     )
 
-    # 2. PII Types Selection Field as checkboxes instead of multi-select dropdown
-    # Choices will be set dynamically in the Flask route
-    pii_types = MultiCheckboxField(
-        'Select PII Types to Redact',
-        coerce=str  # Important when choices are set dynamically
+    # 2. Common PII Types Selection Field (India-specific with friendly names)
+    common_pii_types = MultiCheckboxField(
+        'Select Common PII Types to Redact',
+        coerce=str
+    )
+    
+    # 3. Advanced PII Types Selection Field 
+    advanced_pii_types = MultiCheckboxField(
+        'Select Advanced PII Types to Redact',
+        coerce=str
     )
 
-    # 3. Barcode Types Selection Field as checkboxes
+    # 4. Barcode Types Selection Field as checkboxes
     # Choices will be set dynamically in the Flask route
     barcode_types = MultiCheckboxField(
         'Select Barcode Types to Redact',
         coerce=str
     )
     
-    # 4. Toggle for Barcode Redaction
+    # 5. Toggle for Barcode Redaction
     redact_barcodes = BooleanField(
         'Enable Barcode/QR Code Redaction', 
         default=True
     )
 
-    # 5. Keyword Filter Field (Optional)
+    # 6. Keyword Filter Field (Optional)
     keyword_rules = TextAreaField(
         'Keyword Filters (Optional - one per line)',
         description="Only redact detected PII if the text also contains one of these keywords.",
         validators=[Optional()]
     )
 
-    # 6. Regex Filter Field (Optional with Custom Validation)
+    # 7. Regex Filter Field (Optional with Custom Validation)
     regex_rules = TextAreaField(
         'Regex Filters (Optional - one per line)',
         description="Only redact detected PII if the text also matches one of these Python regex patterns.",
         validators=[Optional(), validate_each_line_regex]
     )
 
-    # 7. Submit Button
+    # 8. Submit Button
     submit = SubmitField('Start Redaction')

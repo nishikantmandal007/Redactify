@@ -30,6 +30,7 @@ INDIA_AADHAAR_ENTITY = "INDIA_AADHAAR_NUMBER"
 INDIA_PAN_ENTITY = "INDIA_PAN_NUMBER"
 INDIA_MOBILE_ENTITY = "INDIA_MOBILE_NUMBER"  # Optional, might overlap with default
 INDIA_VOTER_ID_ENTITY = "INDIA_VOTER_ID"
+INDIA_PASSPORT_ENTITY = "INDIA_PASSPORT"  # Added new entity for Indian Passport
 EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER"  # Covers Roll No, App ID etc.
 
 logger = logging.getLogger(__name__)
@@ -164,24 +165,7 @@ except Exception as e:
     logger.error(f"Failed to define Aadhaar recognizer: {e}", exc_info=True)
     india_aadhaar_recognizer = None
 
-# 2. Indian Mobile Number Recognizer (Optional - Consider default PHONE_NUMBER)
-try:
-    # Allows optional space/hyphen after prefix, optional space before 10 digits
-    mobile_regex = r"\b(?:(?:\+91\s*[-\s]?)|0)?\s*([6-9]\d{9})\b"
-    mobile_pattern = Pattern(
-        name="indian_mobile_format",
-        regex=mobile_regex,
-        score=SCORE_MEDIUM_CONFIDENCE
-    )
-    india_mobile_recognizer = PatternRecognizer(
-        supported_entity=INDIA_MOBILE_ENTITY,
-        name="IndiaMobileRecognizer",
-        patterns=[mobile_pattern]
-    )
-    logger.info("Defined India Mobile Number recognizer (use cautiously).")
-except Exception as e:
-    logger.error(f"Failed to define Mobile recognizer: {e}", exc_info=True)
-    india_mobile_recognizer = None
+# Indian Mobile Number Recognizer is removed as the default PHONE_NUMBER recognizer works fine
 
 # 3. Voter ID (EPIC) Number Recognizer (India - Example Formats)
 try:
@@ -202,7 +186,27 @@ except Exception as e:
     india_voterid_recognizer = None
 
 
-# 4. Generic Exam Identifier Recognizer (Roll No, App ID etc.)
+# 4. Indian Passport Number Recognizer
+try:
+    # Indian passport format (Letter followed by 7 digits, e.g., "A1234567")
+    passport_regex = r"\b[A-Z][0-9]{7}\b"
+    passport_pattern = Pattern(
+        name="indian_passport_format",
+        regex=passport_regex,
+        score=SCORE_MEDIUM_HIGH_CONFIDENCE
+    )
+    india_passport_recognizer = PatternRecognizer(
+        supported_entity=INDIA_PASSPORT_ENTITY,
+        name="IndiaPassportRecognizer",
+        patterns=[passport_pattern],
+        context=["passport", "passport no", "travel document", "visa", "immigration", "foreign"]
+    )
+    logger.info("Defined India Passport Number recognizer.")
+except Exception as e:
+    logger.error(f"Failed to define Passport recognizer: {e}", exc_info=True)
+    india_passport_recognizer = None
+
+# 5. Generic Exam Identifier Recognizer (Roll No, App ID etc.)
 try:
     exam_id_patterns = [
         # Roll No: ~Year(2-4d)-Branch(2-4L)-Num(4-8d)
@@ -248,8 +252,9 @@ custom_recognizer_list = [
         IndiaPanChecksumRecognizer() if 'IndiaPanChecksumRecognizer' in locals() and IndiaPanChecksumRecognizer is not None else None,
         # Pattern recognizer instances
         india_aadhaar_recognizer,
-        # india_mobile_recognizer, # Uncomment if needed
+        # india_mobile_recognizer, # Removed as the default recognizer works fine
         india_voterid_recognizer,
+        india_passport_recognizer, # Added India passport recognizer to the list
         generic_exam_id_recognizer,
     ] if rec is not None  # Final check to ensure instance is valid
 ]
