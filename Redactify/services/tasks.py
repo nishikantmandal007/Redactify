@@ -200,8 +200,11 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules):
             except OSError as cleanup_err:
                 logging.warning(f"Task {task_id}: Failed to clean up partial file {redacted_file_path}: {cleanup_err}")
         
-        # Clean up original file if not already deleted
-        if not original_file_deleted and os.path.exists(file_path):
+        # Check if we're going to retry before cleaning up the original file
+        will_retry = isinstance(e, (ConnectionError, TimeoutError)) or 'MemoryError' in str(e)
+        
+        # Only clean up the original file if we're not going to retry
+        if not original_file_deleted and os.path.exists(file_path) and not will_retry:
             try:
                 os.remove(file_path)
                 logging.info(f"Task {task_id}: Cleaned up original file after failure: {file_path}")
@@ -215,9 +218,8 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules):
             'status': f'Redaction process failed: {type(e).__name__}'
         })
         
-        # Determine if we should retry based on error type
-        # Retry network errors, timeouts, or resource issues
-        if isinstance(e, (ConnectionError, TimeoutError)) or 'MemoryError' in str(e):
+        # Retry for certain error types
+        if will_retry:
             return self.retry(exc=e)
         
         # Otherwise, re-raise for normal failure handling
