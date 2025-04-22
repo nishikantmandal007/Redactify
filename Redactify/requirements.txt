@@ -28,3 +28,6 @@ PyYAML>=6.0  # YAML parsing for configuration files
 python-dotenv>=0.20.0  # Environment variable management
 requests>=2.27.0  # HTTP library
 shapely>=1.8.0  # Geometric operations library
+psutil>=5.9.0  # System resource monitoring
+gunicorn>=20.1.0  # WSGI HTTP Server for production
+flower>=1.0.0  # Celery monitoring tool

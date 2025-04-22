@@ -1,0 +1,77 @@
+version: '3.8'
+
+# Production override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale worker-redaction=3
+
+services:
+  # Redis service - use more resilient configuration
+  redis:
+    image: redis:6-alpine
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+    restart: unless-stopped
+
+  # Web application frontend - scale behind load balancer
+  web:
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    restart: always
+    environment:
+      - GUNICORN_WORKERS=4
+      - GUNICORN_THREADS=4
+      - GUNICORN_TIMEOUT=120
+      - GUNICORN_KEEPALIVE=5
+    
+  # Celery worker for processing PDFs (redaction tasks)
+  worker-redaction:
+    deploy:
+      replicas: 3  # Scale to multiple replicas
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    restart: always
+    environment:
+      - CELERY_CONCURRENCY=4  # Worker concurrency
+      - CELERY_MAX_TASKS_PER_CHILD=10
+      - CELERY_TASK_TIME_LIMIT=600
+      
+  # Celery worker for maintenance tasks
+  worker-maintenance:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    restart: always
+    
+  # Celery beat for scheduled tasks - only need one instance
+  beat:
+    deploy:
+      replicas: 1  # Just one beat instance needed
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 512M
+    restart: always
+
+  # Flower for monitoring Celery tasks (optional)
+  flower:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    restart: always
+
+volumes:
+  redis-data:

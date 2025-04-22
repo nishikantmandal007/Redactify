@@ -124,6 +124,15 @@ REDIS_URL = config.get("redis_url")
 HOST = config.get("host")
 PORT = config.get("port")
 
+def set_config_paths(upload_dir=None, temp_dir=None):
+    """Override the configuration paths for testing or other purposes."""
+    global UPLOAD_DIR, TEMP_DIR
+    if upload_dir is not None:
+        UPLOAD_DIR = upload_dir
+    if temp_dir is not None:
+        TEMP_DIR = temp_dir
+    logging.info(f"Configuration paths overridden - Upload dir: {UPLOAD_DIR}, Temp dir: {TEMP_DIR}")
+
 def get_config_value(key, default_key=None, value_type=None):
     """Helper to safely get a config value with type conversion"""
     try:

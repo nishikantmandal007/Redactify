@@ -20,6 +20,9 @@ INDIA_PASSPORT_ENTITY = "INDIA_PASSPORT"
 # Document and ID-related entities
 EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER"  # Covers Roll No, App ID etc.
 
+# Barcode/QR Code entity
+QR_CODE_ENTITY = "QR_CODE"  # For QR code detection and redaction
+
 # --- Score Constants ---
 # Confidence scores for recognizers
 SCORE_HIGH_CONFIDENCE = 0.9       # PAN structure + checksum (if enabled and valid)
@@ -41,8 +44,12 @@ ID_DOCUMENT_ENTITIES = [
     EXAM_IDENTIFIER_ENTITY,
 ]
 
+BARCODE_ENTITIES = [
+    QR_CODE_ENTITY,
+]
+
 # All entity types defined in this module
-ALL_ENTITIES = INDIA_ENTITIES + ID_DOCUMENT_ENTITIES
+ALL_ENTITIES = INDIA_ENTITIES + ID_DOCUMENT_ENTITIES + BARCODE_ENTITIES
 
 # --- Helper functions ---
 def get_entity_names():

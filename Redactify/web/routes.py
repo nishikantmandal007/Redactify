@@ -189,10 +189,15 @@ def process_ajax():
     barcode_types_to_redact = request.form.getlist('barcode_types')
     redact_barcodes = request.form.get('redact_barcodes') == 'y'
 
-    # Validate PII types against known list
-    valid_pii_types = get_pii_choices_from_util()
+    # Validate PII types against known list (include both common and advanced types)
+    valid_pii_types = get_pii_choices_from_util(advanced=False) + get_pii_choices_from_util(advanced=True)
     pii_types_selected = [ptype for ptype in pii_types_selected if ptype in valid_pii_types]
-    
+
+    # Log a warning if any advanced PII types are filtered out
+    filtered_out_advanced = [ptype for ptype in advanced_pii_selected if ptype not in valid_pii_types]
+    if filtered_out_advanced:
+        logging.warning(f"The following advanced PII types were filtered out as invalid: {filtered_out_advanced}")
+
     # Always include QR_CODE if redact_barcodes is enabled
     if redact_barcodes and "QR_CODE" not in pii_types_selected:
         pii_types_selected.append("QR_CODE")

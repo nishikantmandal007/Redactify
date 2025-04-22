@@ -35,22 +35,83 @@ export FLASK_SECRET_KEY='your_secret_key_here'
 ```
 
 For production, create a .env file in the project root with these values.
+```
+export FLASK_APP=Redactify/app.py && python -m flask run
+```
+## Running the Application (Optimized for Scaling)
 
-## Running the Application
+### 1. Start Celery Workers with Queue Specialization
 
-### 1. Start Celery Worker
-In the first terminal, start the Celery worker for processing PDF files in the background:
+For better scalability, we now use specialized workers for different task types:
+
 ```bash
-celery -A Redactify.services.celery_service.celery worker --loglevel=info
+# Start worker for redaction tasks (heavy processing)
+celery -A Redactify.services.celery_service.celery worker --loglevel=info --concurrency=4 -Q redaction --hostname=redaction@%h
+
+# Start worker for maintenance tasks (separate terminal)
+celery -A Redactify.services.celery_service.celery worker --loglevel=info --concurrency=1 -Q maintenance --hostname=maintenance@%h
 ```
 
-### 2. Start Flask Web Server
-In a second terminal, start the Flask web server:
+### 2. Start Celery Beat for Scheduled Tasks (optional)
+
+To enable automated periodic tasks like cleanup:
+
 ```bash
-python -m flask run
+celery -A Redactify.services.celery_service.celery beat --loglevel=info
+```
+
+### 3. Start Flask Web Server
+
+In another terminal, start the Flask web server:
+
+```bash
+python -m flask run --host=0.0.0.0 --port=5000
+```
+
+For production, use a proper WSGI server:
+
+```bash
+gunicorn -w 4 -b 0.0.0.0:5000 "Redactify.web.app_factory:create_app()"
 ```
 
 The application will be available at http://127.0.0.1:5000/
+
+## Scaling Tips
+
+### Memory Optimization
+
+If you're experiencing memory issues with large PDFs, adjust these settings in config.yaml:
+
+```yaml
+# Set lower values for these if memory is limited
+ocr_confidence_threshold: 0.3
+presidio_confidence_threshold: 0.4
+
+# Celery task timeouts (adjust if processing large documents)
+celery_task_soft_time_limit: 600 # 10 minutes
+celery_task_hard_time_limit: 660 # 11 minutes
+```
+
+### Multi-server Deployment
+
+For high-volume processing:
+
+1. Use a shared Redis instance for all servers
+2. Configure multiple worker servers with specialized roles:
+   - Web servers (Flask/Gunicorn) - handling user requests
+   - Processing workers (Celery workers) - handling PDF processing
+   - Maintenance workers (Celery beat + maintenance queue) - handling periodic tasks
+
+### Monitoring
+
+Monitor your Celery workers with Flower:
+
+```bash
+pip install flower
+celery -A Redactify.services.celery_service.celery flower --port=5555
+```
+
+Access the monitoring dashboard at http://localhost:5555
 
 ## Project Structure
 

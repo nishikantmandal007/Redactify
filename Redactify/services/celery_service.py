@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # Redactify/services/celery_service.py
 from celery import Celery
+from celery.schedules import crontab
+import os
 
 # Import config values from our new core config module
 from ..core.config import (
@@ -13,6 +15,28 @@ CELERY_TASK_AUTORETRY_FOR = (ConnectionRefusedError, TimeoutError)
 CELERY_TASK_RETRY_KWARGS = {'max_retries': 3}
 CELERY_TASK_RETRY_BACKOFF = True
 CELERY_TASK_RETRY_BACKOFF_MAX = 70
+
+# Define task routing
+TASK_ROUTES = {
+    'Redactify.services.tasks.perform_redaction': {
+        'queue': 'redaction',
+        'routing_key': 'redaction.process',
+    },
+    'Redactify.services.tasks.cleanup_expired_files': {
+        'queue': 'maintenance',
+        'routing_key': 'maintenance.cleanup',
+    }
+}
+
+# Define Beat schedule for periodic tasks
+BEAT_SCHEDULE = {
+    'cleanup-expired-files': {
+        'task': 'Redactify.services.tasks.cleanup_expired_files',
+        'schedule': crontab(hour='3', minute='30'),  # Run at 3:30 AM
+        'options': {'queue': 'maintenance'}
+    },
+    # You can add other periodic tasks here
+}
 
 def create_celery_app():
     """Create and configure the Celery application instance."""
@@ -31,6 +55,11 @@ def create_celery_app():
         task_retry_kwargs=CELERY_TASK_RETRY_KWARGS,
         task_retry_backoff=CELERY_TASK_RETRY_BACKOFF,
         task_retry_backoff_max=CELERY_TASK_RETRY_BACKOFF_MAX,
+        task_routes=TASK_ROUTES,
+        worker_prefetch_multiplier=1,  # Prevents worker from prefetching too many tasks
+        task_acks_late=True,  # Tasks are acknowledged after execution
+        beat_schedule=BEAT_SCHEDULE,
+        worker_max_tasks_per_child=50,  # Restart workers after 50 tasks to prevent memory leaks
     )
     
     return celery_app

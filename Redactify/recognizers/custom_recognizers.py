@@ -4,6 +4,7 @@
 import logging
 import re
 from typing import List, Optional
+import functools
 
 # Import centralized entity type definitions
 from .entity_types import (
@@ -13,6 +14,7 @@ from .entity_types import (
     INDIA_VOTER_ID_ENTITY,
     INDIA_PASSPORT_ENTITY,
     EXAM_IDENTIFIER_ENTITY,
+    QR_CODE_ENTITY,  # Added QR code entity
     # Score constants
     SCORE_HIGH_CONFIDENCE,
     SCORE_MEDIUM_HIGH_CONFIDENCE,
@@ -41,11 +43,32 @@ if not logger.hasHandlers():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - CUSTOM_REC - %(message)s')
 
 
+# --- Define regex patterns as strings ---
+# These will be compiled by Presidio when used in Pattern objects
+PAN_REGEX = r"\b([A-Z]{5}[0-9]{4}[A-Z])\b"
+AADHAAR_PATTERN_SPACED = r"\b(?:\d{4}[-\s]?){2}\d{4}\b"
+AADHAAR_PATTERN_NOSPACE = r"\b(?<!\d)\d{12}(?!\d)\b" 
+VOTERID_PATTERN_3L7D = r"\b[A-Z]{3}\d{7}\b"
+VOTERID_PATTERN_2L3D6D = r"\b[A-Z]{2}[/\s-]?\d{3}[/\s-]?\d{6}\b"
+PASSPORT_PATTERN = r"\b[A-Z][0-9]{7}\b"
+ROLLNO_ALPHANUM_PREFIX = r"\b\d{2,4}[A-Z]{2,4}[-\s]?\d{4,8}\b" 
+ROLLNO_NUMERIC_10D = r"\b(?<!\d)\d{10}(?!\d)\b"
+ROLLNO_NUMERIC_12D = r"\b(?<!\d)\d{12}(?!\d)\b" 
+APP_ID_STRUCTURED = r"\b[A-Z]{2,5}(?:/|-)\d{2,4}(?:/|-)\d{4,}\b"
+JEE_MAIN_APP_NO = r"\b(?:2303|2403|2503)\d{8}\b"
+ROLLNO_STATE_PREFIX = r"\b[A-Z]{2}\d{8,10}\b"
+
+# --- For internal use in custom Python-based recognizers ---
+PAN_REGEX_PATTERN = re.compile(PAN_REGEX)
+
+
 # --- Helper Function for PAN Checksum (Example - Placeholder Logic) ---
+@functools.lru_cache(maxsize=128)  # Add caching for repeated validation
 def _validate_pan_checksum(pan: str) -> bool:
     """
     Placeholder for PAN checksum validation.
     Replace with the actual algorithm for production use.
+    Uses LRU cache to avoid re-validation of same PAN numbers.
     """
     if not isinstance(pan, str) or len(pan) != 10 or not re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", pan):
         return False
@@ -61,7 +84,8 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
     Recognizes Indian PAN numbers using regex and optionally validates checksum.
     """
     SUPPORTED_ENTITIES = [INDIA_PAN_ENTITY]
-    PAN_REGEX = re.compile(r"\b([A-Z]{5}[0-9]{4}[A-Z])\b")
+    PAN_REGEX = PAN_REGEX_PATTERN  # Use pre-compiled pattern (for internal use)
+    PATTERN_STR = PAN_REGEX  # Keep string version for explanations
     # Default to checking checksum, can be overridden during init
     DEFAULT_CHECK_CHECKSUM = True
     CONTEXT = ["pan", "permanent account", "income tax", "form 16", "tax deduction", "form 26as"]
@@ -126,7 +150,7 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
                 analysis_explanation=self.build_analysis_explanation(
                     recognizer_name=self.name,
                     pattern_name="PAN Format" + ("+Checksum" if self.check_checksum and checksum_valid else ""),
-                    pattern=self.PAN_REGEX.pattern,
+                    pattern=self.PATTERN_STR,  # Use string pattern for explanation
                     original_score=score,
                     validation_result=checksum_valid
                 ),
@@ -136,21 +160,64 @@ class IndiaPanChecksumRecognizer(EntityRecognizer):
 
         return results
 
+# --- QR Code Placeholder Recognizer ---
+class QrCodeRecognizer(EntityRecognizer):
+    """
+    This is a placeholder recognizer for QR codes.
+    
+    QR codes are actually detected and processed by image analysis code in the 
+    processors/qr_code_processor.py module, not by text pattern matching.
+    However, we need this recognizer to register the QR_CODE entity type with
+    the Presidio analyzer to prevent the warning message.
+    """
+    SUPPORTED_ENTITIES = [QR_CODE_ENTITY]
+    CONTEXT = ["qr", "qr code", "qrcode", "barcode", "scan", "scan me", "code"]
+    
+    def __init__(
+        self,
+        supported_language: str = "en",
+        name: Optional[str] = "QrCodeRecognizer",
+        supported_entities: Optional[List[str]] = None,
+        context: Optional[List[str]] = None,
+    ):
+        # Use provided context or default
+        context_to_use = context if context is not None else self.CONTEXT
+        super().__init__(
+            supported_entities=supported_entities if supported_entities else self.SUPPORTED_ENTITIES,
+            name=name,
+            supported_language=supported_language,
+            context=context_to_use
+        )
+        logger.info(f"Initialized {self.name}")
+
+    def load(self) -> None:
+        """No resources to load."""
+        pass
+
+    def analyze(self, text: str, entities: List[str], nlp_artifacts: NlpArtifacts) -> List[RecognizerResult]:
+        """
+        This is a placeholder implementation that doesn't actually detect QR codes in text.
+        QR code detection happens in the image processing pipeline.
+        But this method is required by the EntityRecognizer interface.
+        """
+        # This recognizer doesn't actually find anything in the text
+        # QR code detection is handled in the image processing code
+        return []
+
 # --- Pattern Recognizers (Simpler format matching) ---
 
 # 1. Aadhaar Number Recognizer (India) - Format only
 try:
     # Allows optional single space or hyphen between 4-digit groups
-    aadhaar_regex = r"\b(?:\d{4}[-\s]?){2}\d{4}\b"
     aadhaar_pattern = Pattern(
         name="aadhaar_number_format_spaced",
-        regex=aadhaar_regex,
+        regex=AADHAAR_PATTERN_SPACED,  # Use string pattern
         score=SCORE_MEDIUM_HIGH_CONFIDENCE
     )
     # Pattern for 12 digits with no spaces/hyphens (use lookarounds for safety)
     aadhaar_pattern_nospace = Pattern(
         name="aadhaar_number_format_nospace",
-        regex=r"\b(?<!\d)\d{12}(?!\d)\b",
+        regex=AADHAAR_PATTERN_NOSPACE,  # Use string pattern
         score=SCORE_MEDIUM_CONFIDENCE  # Slightly lower confidence than spaced version
     )
     india_aadhaar_recognizer = PatternRecognizer(
@@ -169,8 +236,8 @@ except Exception as e:
 # 3. Voter ID (EPIC) Number Recognizer (India - Example Formats)
 try:
     voterid_patterns = [
-        Pattern(name="voter_id_3L7D", regex=r"\b[A-Z]{3}\d{7}\b", score=SCORE_MEDIUM_CONFIDENCE),
-        Pattern(name="voter_id_2L3D6D", regex=r"\b[A-Z]{2}[/\s-]?\d{3}[/\s-]?\d{6}\b", score=SCORE_MEDIUM_CONFIDENCE),
+        Pattern(name="voter_id_3L7D", regex=VOTERID_PATTERN_3L7D, score=SCORE_MEDIUM_CONFIDENCE),
+        Pattern(name="voter_id_2L3D6D", regex=VOTERID_PATTERN_2L3D6D, score=SCORE_MEDIUM_CONFIDENCE),
         # Add more known valid formats here
     ]
     india_voterid_recognizer = PatternRecognizer(
@@ -188,10 +255,9 @@ except Exception as e:
 # 4. Indian Passport Number Recognizer
 try:
     # Indian passport format (Letter followed by 7 digits, e.g., "A1234567")
-    passport_regex = r"\b[A-Z][0-9]{7}\b"
     passport_pattern = Pattern(
         name="indian_passport_format",
-        regex=passport_regex,
+        regex=PASSPORT_PATTERN,  # Use string pattern
         score=SCORE_MEDIUM_HIGH_CONFIDENCE
     )
     india_passport_recognizer = PatternRecognizer(
@@ -209,19 +275,19 @@ except Exception as e:
 try:
     exam_id_patterns = [
         # Roll No: ~Year(2-4d)-Branch(2-4L)-Num(4-8d)
-        Pattern(name="rollno_alphanum_prefix", regex=r"\b\d{2,4}[A-Z]{2,4}[-\s]?\d{4,8}\b", score=0.7),
+        Pattern(name="rollno_alphanum_prefix", regex=ROLLNO_ALPHANUM_PREFIX, score=0.7),
         # Roll No: Purely numeric (10 or 12 digits) - Low confidence, use lookarounds
-        Pattern(name="rollno_numeric_10d", regex=r"\b(?<!\d)\d{10}(?!\d)\b", score=SCORE_LOW_CONFIDENCE),
-        Pattern(name="rollno_numeric_12d", regex=r"\b(?<!\d)\d{12}(?!\d)\b", score=SCORE_LOW_CONFIDENCE),
+        Pattern(name="rollno_numeric_10d", regex=ROLLNO_NUMERIC_10D, score=SCORE_LOW_CONFIDENCE),
+        Pattern(name="rollno_numeric_12d", regex=ROLLNO_NUMERIC_12D, score=SCORE_LOW_CONFIDENCE),
         # App ID: Prefix(2-5L)-Year(2/4d)-Num(4+d)
-        Pattern(name="app_id_structured", regex=r"\b[A-Z]{2,5}(?:/|-)\d{2,4}(?:/|-)\d{4,}\b", score=0.8),
+        Pattern(name="app_id_structured", regex=APP_ID_STRUCTURED, score=0.8),
         # Example JEE Main App No (Year + 8 Digits - Adjusted):
         # Use non-capturing group for years to avoid confusion
-        Pattern(name="jee_main_app_no", regex=r"\b(?:2303|2403|2503)\d{8}\b", score=0.85),
+        Pattern(name="jee_main_app_no", regex=JEE_MAIN_APP_NO, score=SCORE_MEDIUM_HIGH_CONFIDENCE), # Increased score
         # State-Code Roll Numbers: 2 Letters, 8-10 Digits
         Pattern(
             name="rollno_state_prefix_numeric",
-            regex=r"\b[A-Z]{2}\d{8,10}\b",
+            regex=ROLLNO_STATE_PREFIX,
             score=SCORE_MEDIUM_HIGH_CONFIDENCE  # Pretty specific format
         ),
         # Add more specific exam/university formats here
@@ -255,6 +321,8 @@ custom_recognizer_list = [
         india_voterid_recognizer,
         india_passport_recognizer, # Added India passport recognizer to the list
         generic_exam_id_recognizer,
+        # Add QR code recognizer
+        QrCodeRecognizer(),
     ] if rec is not None  # Final check to ensure instance is valid
 ]
 

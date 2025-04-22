@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # Redis service (message broker and result backend)
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - redactify-net
+
+  # Web application frontend
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../upload_files:/app/upload_files
+      - ../temp_files:/app/temp_files
+    depends_on:
+      - redis
+    environment:
+      - FLASK_APP=Redactify/app.py
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-default_insecure_key}
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0
+    command: >
+      gunicorn --bind 0.0.0.0:5000 
+      "Redactify.web.app_factory:create_app(production=True)" 
+      --workers ${GUNICORN_WORKERS:-4}
+      --threads ${GUNICORN_THREADS:-2}
+      --timeout ${GUNICORN_TIMEOUT:-120}
+      --keep-alive ${GUNICORN_KEEPALIVE:-5}
+      --access-logfile -
+    networks:
+      - redactify-net
+
+  # Celery worker for processing PDFs (redaction tasks)
+  worker-redaction:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - redis
+    volumes:
+      - ../upload_files:/app/upload_files
+      - ../temp_files:/app/temp_files
+    environment:
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0
+    command: >
+      celery -A Redactify.services.celery_service.celery worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-4}
+      -Q redaction
+      --hostname=redaction@%h
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-10}
+    networks:
+      - redactify-net
+
+  # Celery worker for maintenance tasks
+  worker-maintenance:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - redis
+    volumes:
+      - ../upload_files:/app/upload_files
+      - ../temp_files:/app/temp_files
+    environment:
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0
+    command: >
+      celery -A Redactify.services.celery_service.celery worker
+      --loglevel=info
+      --concurrency=1
+      -Q maintenance
+      --hostname=maintenance@%h
+    networks:
+      - redactify-net
+
+  # Celery beat for scheduled tasks (optional)
+  beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - redis
+    volumes:
+      - ../temp_files:/app/temp_files
+    environment:
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0
+    command: celery -A Redactify.services.celery_service.celery beat --loglevel=info
+    networks:
+      - redactify-net
+
+  # Flower for monitoring Celery tasks (optional)
+  flower:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - worker-redaction
+    environment:
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0
+    command: celery -A Redactify.services.celery_service.celery flower --port=5555 --address=0.0.0.0
+    networks:
+      - redactify-net
+
+networks:
+  redactify-net:
+    driver: bridge
+
+volumes:
+  redis-data:
