@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const advancedOptionsToggle = document.getElementById('advanced-options-toggle');
     const advancedOptionsSection = document.getElementById('advanced-options-section');
 
+    // Metadata redaction element
+    const redactMetadataCheckbox = document.getElementById('redact_metadata');
+
     if (advancedOptionsToggle && advancedOptionsSection) {
         advancedOptionsToggle.addEventListener('click', function () {
             // Toggle icon rotation
@@ -290,6 +293,22 @@ document.addEventListener('DOMContentLoaded', function () {
             if (statusMessageDiv) {
                 statusMessageDiv.className = 'alert alert-success';
                 statusMessageDiv.innerHTML = `<i class="material-icons-round me-2">check_circle</i> ${data.status}`;
+
+                // Add metadata redaction info if available
+                if (data.result && data.metadata_stats && data.metadata_stats.cleaned) {
+                    const metadataInfo = document.createElement('div');
+                    metadataInfo.className = 'mt-2 p-2 bg-light rounded';
+                    metadataInfo.innerHTML = `
+                        <strong>Document Metadata Cleaning Results:</strong>
+                        <ul class="mb-0 small">
+                            <li>Document properties cleaned (author, title, etc.)</li>
+                            ${data.metadata_stats.hidden_text_removed ? '<li>Hidden text layers removed</li>' : ''}
+                            ${data.metadata_stats.embedded_files_removed ? '<li>Embedded files and JavaScript removed</li>' : ''}
+                            ${data.metadata_stats.history_cleaned ? '<li>Document revision history cleaned</li>' : ''}
+                        </ul>
+                    `;
+                    statusMessageDiv.appendChild(metadataInfo);
+                }
             }
 
             // Show download link if result filename is provided

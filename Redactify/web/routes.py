@@ -188,6 +188,7 @@ def process_ajax():
     regex_data = request.form.get('regex_rules', '')
     barcode_types_to_redact = request.form.getlist('barcode_types')
     redact_barcodes = request.form.get('redact_barcodes') == 'y'
+    redact_metadata = request.form.get('redact_metadata') == 'y'
 
     # Validate PII types against known list (include both common and advanced types)
     valid_pii_types = get_pii_choices_from_util(advanced=False) + get_pii_choices_from_util(advanced=True)
@@ -201,6 +202,10 @@ def process_ajax():
     # Always include QR_CODE if redact_barcodes is enabled
     if redact_barcodes and "QR_CODE" not in pii_types_selected:
         pii_types_selected.append("QR_CODE")
+        
+    # Always include METADATA if redact_metadata is enabled
+    if redact_metadata and "METADATA" not in pii_types_selected:
+        pii_types_selected.append("METADATA")
 
     custom_rules = {}
     if keyword_data:

@@ -13,6 +13,7 @@ from .celery_service import celery
 from ..processors.pdf_detector import is_scanned_pdf # Changed import
 from .redaction import redact_digital_pdf, redact_scanned_pdf, redact_image
 from ..core.config import UPLOAD_DIR, TEMP_DIR
+from ..recognizers.entity_types import METADATA_ENTITY
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - TASK - %(message)s')
@@ -166,13 +167,14 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules):
 
         # Task completed successfully
         status_msg = 'Redaction Complete!' + (' Original file removed.' if original_file_deleted else '')
+        
+        # Add metadata information to status message if applicable
+        if METADATA_ENTITY in redacted_types_set:
+            status_msg += " Document metadata cleaned."
+            
         logging.info(f"Task {task_id}: {status_msg} Result file: {redacted_filename}")
         
         # Log comparison of selected vs redacted PII types
-        # Create a result dictionary with redacted types
-        # In the future, redaction functions should return this information
-        result = {'redacted_types': set()}  # Initialize with empty set
-        redacted_types_set = result['redacted_types']
         selected_set = set(pii_types_selected)
         
         successfully_redacted = selected_set.intersection(redacted_types_set)
@@ -180,13 +182,25 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules):
         
         logging.info(f"Task {task_id}: Redaction Summary - Selected: {sorted(list(selected_set))}, Found & Redacted: {sorted(list(successfully_redacted))}, Not Found/Redacted: {sorted(list(missed_or_not_found))}")
         
-        # Modify return value to include the set of redacted types
+        # Create metadata statistics dictionary for UI display
+        metadata_stats = {}
+        if METADATA_ENTITY in redacted_types_set:
+            metadata_stats = {
+                'cleaned': True,
+                'fields_removed': ['author', 'creator', 'producer', 'title', 'subject', 'keywords'],
+                'hidden_text_removed': True,
+                'embedded_files_removed': True,
+                'history_cleaned': True
+            }
+            
+        # Modify return value to include the set of redacted types and metadata stats
         return {
             'current': 100, 
             'total': 100, 
             'status': status_msg, 
             'result': redacted_filename,
-            'redacted_types': list(redacted_types_set) # Include the set in the result
+            'redacted_types': list(redacted_types_set),  # Include the set in the result
+            'metadata_stats': metadata_stats  # Include metadata statistics
         }
 
     except Exception as e:

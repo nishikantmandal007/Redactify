@@ -23,6 +23,9 @@ EXAM_IDENTIFIER_ENTITY = "EXAM_IDENTIFIER"  # Covers Roll No, App ID etc.
 # Barcode/QR Code entity
 QR_CODE_ENTITY = "QR_CODE"  # For QR code detection and redaction
 
+# Add METADATA to entity types
+METADATA_ENTITY = "METADATA"  # Added for document metadata redaction
+
 # --- Score Constants ---
 # Confidence scores for recognizers
 SCORE_HIGH_CONFIDENCE = 0.9       # PAN structure + checksum (if enabled and valid)
@@ -49,7 +52,7 @@ BARCODE_ENTITIES = [
 ]
 
 # All entity types defined in this module
-ALL_ENTITIES = INDIA_ENTITIES + ID_DOCUMENT_ENTITIES + BARCODE_ENTITIES
+ALL_ENTITIES = INDIA_ENTITIES + ID_DOCUMENT_ENTITIES + BARCODE_ENTITIES + [METADATA_ENTITY]
 
 # --- Helper functions ---
 def get_entity_names():

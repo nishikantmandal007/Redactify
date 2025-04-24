@@ -75,6 +75,7 @@ ADVANCED = PiiCategory(
         ('UK_NHS', 'UK NHS Number'),
         ('UK_PASSPORT', 'UK Passport Number'),
         ('SWIFT_CODE', 'SWIFT Code'),
+        ('METADATA', 'Document Metadata & Hidden Content'),
     ]
 )
 

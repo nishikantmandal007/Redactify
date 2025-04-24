@@ -65,19 +65,25 @@ class UploadForm(FlaskForm):
         default=True
     )
 
-    # 6. Keyword Filter Field (Optional)
+    # 6. Toggle for Document Metadata Redaction
+    redact_metadata = BooleanField(
+        'Enable Document Metadata Redaction',
+        default=True
+    )
+
+    # 7. Keyword Filter Field (Optional)
     keyword_rules = TextAreaField(
         'Keyword Filters (Optional - one per line)',
         description="Only redact detected PII if the text also contains one of these keywords.",
         validators=[Optional()]
     )
 
-    # 7. Regex Filter Field (Optional with Custom Validation)
+    # 8. Regex Filter Field (Optional with Custom Validation)
     regex_rules = TextAreaField(
         'Regex Filters (Optional - one per line)',
         description="Only redact detected PII if the text also matches one of these Python regex patterns.",
         validators=[Optional(), validate_each_line_regex]
     )
 
-    # 8. Submit Button
+    # 9. Submit Button
     submit = SubmitField('Start Redaction')

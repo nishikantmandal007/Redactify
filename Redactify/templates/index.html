@@ -122,6 +122,21 @@
                             </div>
                         </div>
 
+                        <!-- Document Metadata Redaction -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                {{ form.redact_metadata(class="form-check-input") }}
+                                <label class="form-check-label d-flex align-items-center" for="redact_metadata">
+                                    <i class="material-icons-round me-2">data_object</i> Enable Document Metadata
+                                    Redaction
+                                </label>
+                            </div>
+                            <small class="form-text text-muted ms-5 ps-2">
+                                Removes sensitive information from document properties, hidden text layers, embedded
+                                files, and revision history.
+                            </small>
+                        </div>
+
                         <!-- Keyword Filters -->
                         <div class="mb-3">
                             <label for="keyword_rules" class="form-label d-flex align-items-center">
