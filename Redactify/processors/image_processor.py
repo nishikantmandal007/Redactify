@@ -5,7 +5,7 @@ import os
 import logging
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFont, ImageDraw
 import gc
 import psutil
 from .qr_code_processor import detect_and_redact_qr_codes
@@ -477,7 +477,8 @@ def apply_custom_filters(text, entities_to_redact_conf, custom_rules):
 
 def redact_entities_on_image(entities, char_to_box_map, image_array):
     """
-    Redact detected entities on the image by drawing black rectangles.
+    Redact detected entities on the image by drawing text labels in place of the original text.
+    Uses the centralized text label processor module for consistent label generation.
     
     Args:
         entities: List of detected entities to redact
@@ -487,15 +488,26 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
     Returns:
         int: Number of redactions applied
     """
+    from .text_label_processor import generate_label_text, get_entity_counters, draw_text_label_on_image
+    
     redaction_count = 0
     redacted_rects_on_page = set()
     
+    # Get entity counters for all possible entity types in entities
+    entity_types = {entity.entity_type for entity in entities}
+    entity_counters = get_entity_counters(entity_types)
+    
+    # Process each entity
     for entity in entities:
         try:
-            # Find overlapping boxes
+            # Get entity type
+            entity_type = entity.entity_type
+            
+            # Find overlapping boxes for this entity
+            entity_boxes = []
             for box_info in char_to_box_map:
                 if max(entity.start, box_info['start']) < min(entity.end, box_info['end']):
-                    rect = box_info['rect']  # Get rect info
+                    rect = box_info['rect']
                     rect_tuple = (
                         int(rect['x0']), 
                         int(rect['y0']), 
@@ -504,38 +516,51 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
                     )
                     
                     if rect_tuple not in redacted_rects_on_page:
-                        try:
-                            minx, miny, maxx, maxy = rect_tuple
-                            
-                            # Ensure coordinates are within image boundaries
-                            height, width = image_array.shape[:2]
-                            minx = max(0, min(minx, width - 1))
-                            miny = max(0, min(miny, height - 1))
-                            maxx = max(0, min(maxx, width - 1))
-                            maxy = max(0, min(maxy, height - 1))
-                            
-                            # Only draw if we have a valid box
-                            if maxx > minx and maxy > miny:
-                                # Add small margin around text for better redaction
-                                margin = 2
-                                minx = max(0, minx - margin)
-                                miny = max(0, miny - margin)
-                                maxx = min(width - 1, maxx + margin)
-                                maxy = min(height - 1, maxy + margin)
-                                
-                                # Draw black rectangle
-                                cv2.rectangle(
-                                    image_array, 
-                                    (minx, miny), 
-                                    (maxx, maxy), 
-                                    (0, 0, 0), 
-                                    -1
-                                )
-                                redaction_count += 1
-                                redacted_rects_on_page.add(rect_tuple)
-                        except Exception as draw_err:
-                            logging.warning(f"Failed text blackout: {draw_err}")
+                        entity_boxes.append(rect_tuple)
+                        redacted_rects_on_page.add(rect_tuple)
+            
+            # If no boxes found, skip
+            if not entity_boxes:
+                continue
+                
+            # Find bounding region for all boxes related to this entity
+            min_x = min(box[0] for box in entity_boxes)
+            min_y = min(box[1] for box in entity_boxes)
+            max_x = max(box[2] for box in entity_boxes)
+            max_y = max(box[3] for box in entity_boxes)
+            
+            # Ensure coordinates are within image boundaries
+            height, width = image_array.shape[:2]
+            min_x = max(0, min(min_x, width - 1))
+            min_y = max(0, min(min_y, height - 1))
+            max_x = max(0, min(max_x, width - 1))
+            max_y = max(0, min(max_y, height - 1))
+            
+            # Only proceed if we have a valid box
+            if max_x > min_x and max_y > min_y:
+                # Generate label text
+                label_text = generate_label_text(entity_type, entity_counters[entity_type])
+                
+                # Increment counter for this entity type
+                entity_counters[entity_type] += 1
+                
+                # Add small margin around text for better redaction
+                margin = 2
+                min_x = max(0, min_x - margin)
+                min_y = max(0, min_y - margin)
+                max_x = min(width - 1, max_x + margin)
+                max_y = min(height - 1, max_y + margin)
+                
+                # Draw the label on the image
+                image_array = draw_text_label_on_image(
+                    image_array,
+                    (min_x, min_y, max_x, max_y),
+                    label_text
+                )
+                
+                redaction_count += 1
+                
         except Exception as entity_err:
             logging.warning(f"Error processing entity for redaction: {entity_err}")
-                        
+    
     return redaction_count

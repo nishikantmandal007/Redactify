@@ -15,6 +15,7 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
     """
     Process a digital (text-based) PDF file and redact PII.
     Optimized with batched processing and parallel execution where possible.
+    Uses centralized text label processor module for consistent labeling.
     
     Args:
         pdf_path: Path to the PDF file
@@ -28,6 +29,8 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
     Returns:
         Tuple[str, Set[str]]: Path to the redacted PDF file and a set of redacted entity types.
     """
+    from .text_label_processor import generate_label_text, get_entity_counters, add_text_label_to_pdf, get_pdf_safe_font
+    
     if not os.path.exists(pdf_path):
         logging.error(f"PDF file not found: {pdf_path}")
         raise FileNotFoundError(f"Input file not found: {pdf_path}")
@@ -98,16 +101,65 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                             apply_custom_filters(text, entities_to_redact_conf, custom_rules, entities_to_redact)
                         else:
                             entities_to_redact = entities_to_redact_conf
+                        
+                        # Get entity counters for all entity types
+                        entity_types = {entity.entity_type for entity in entities_to_redact}
+                        entity_counters = get_entity_counters(entity_types)
                             
                         # Redact detected entities
                         for entity in entities_to_redact:
                             try:
+                                entity_type = entity.entity_type
                                 entity_text = text[entity.start:entity.end]
                                 rects = page.search_for(entity_text)
+                                
+                                # Generate label text using centralized function
+                                label_text = generate_label_text(entity_type, entity_counters[entity_type])
+                                
+                                # Increment counter for this entity type
+                                entity_counters[entity_type] += 1
+                                
                                 for rect in rects:
-                                    page.add_redact_annot(rect, fill=(0, 0, 0))
-                                    batch_redaction_count += 1
-                                    batch_redacted_types.add(entity.entity_type) # Add redacted type
+                                    # Extract font information from nearby text if possible, but use a safe font
+                                    try:
+                                        nearby_text = page.get_text("dict", clip=rect.expand(10))
+                                        font_name = None
+                                        font_size = None
+                                        
+                                        if "blocks" in nearby_text and nearby_text["blocks"]:
+                                            for block in nearby_text["blocks"]:
+                                                if "lines" in block:
+                                                    for line in block["lines"]:
+                                                        for span in line["spans"]:
+                                                            if span.get("font") and span.get("size"):
+                                                                # Convert to a PDF-safe standard font
+                                                                font_name = get_pdf_safe_font(span["font"])
+                                                                font_size = span["size"]
+                                                                break
+                                                        if font_name:
+                                                            break
+                                                if font_name:
+                                                    break
+                                    except Exception as e:
+                                        logging.debug(f"Error extracting font info: {e}")
+                                        font_name = None
+                                        font_size = None
+                                    
+                                    # Add redaction annotation using centralized function
+                                    success = add_text_label_to_pdf(
+                                        page,
+                                        rect,
+                                        label_text,
+                                        fill_color=None,  # Use default soft color from text_label_processor
+                                        text_color=None,  # Use default text color from text_label_processor
+                                        font_name=font_name,
+                                        font_size=font_size
+                                    )
+                                    
+                                    if success:
+                                        batch_redaction_count += 1
+                                        batch_redacted_types.add(entity_type)
+                                    
                             except Exception as entity_err:
                                 logging.debug(f"Minor error redacting entity on page {page_num}: {entity_err}")
                                 continue  # Skip this entity but continue processing

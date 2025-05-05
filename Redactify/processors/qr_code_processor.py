@@ -5,9 +5,10 @@ import cv2
 import logging
 import numpy as np
 from pyzbar import pyzbar
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import io
 import fitz  # PyMuPDF
+import os
 
 # Define all barcode types supported by pyzbar
 BARCODE_TYPES = {
@@ -35,7 +36,8 @@ def get_supported_barcode_types():
 
 def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
     """
-    Detects and redacts specified barcode types in an image.
+    Detects and redacts specified barcode types in an image using text labels.
+    Uses the centralized text label processor for consistent label generation.
     
     Args:
         image_array: numpy array of the image
@@ -44,6 +46,8 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
     Returns:
         Tuple of (modified image array, count of barcodes redacted)
     """
+    from .text_label_processor import generate_label_text, draw_text_label_on_image
+    
     # Create a copy of the image to avoid modifying the original
     redacted_image = image_array.copy()
     img_height, img_width = image_array.shape[:2]
@@ -53,8 +57,9 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
         decoded_objects = pyzbar.decode(image_array)
         redaction_count = 0
         detected_types = set()
+        barcode_counter = 1  # Starting counter for barcode labels
         
-        # Draw black rectangles over each detected barcode that matches specified types
+        # Process each detected barcode
         for obj in decoded_objects:
             detected_types.add(obj.type)
             
@@ -81,16 +86,25 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
                 logging.warning(f"Skipping barcode redaction: bounding box too large ({bbox_area/img_area:.2%} of image)")
                 continue
             
-            # Draw black rectangle over barcode
-            cv2.rectangle(redacted_image, (left, top), (right, bottom), (0, 0, 0), -1)
-            
-            # Get some information about the barcode for better logging
+            # Get friendly type name for the barcode
             barcode_type = BARCODE_TYPES.get(obj.type, obj.type)
             barcode_data = obj.data.decode('utf-8', errors='replace')[:20] + '...' if len(obj.data) > 20 else obj.data.decode('utf-8', errors='replace')
             
-            # Log the exact coordinates and type for verification
-            logging.info(f"Redacted {barcode_type} at coordinates: x={left}-{right}, y={top}-{bottom}, data: {barcode_data}")
+            # Generate label text using the centralized function
+            entity_type = "QR_CODE" if obj.type == "QRCODE" else "BARCODE"
+            label_text = generate_label_text(entity_type, barcode_counter)
+            
+            # Draw the text label on the image
+            redacted_image = draw_text_label_on_image(
+                redacted_image,
+                (left, top, right, bottom),
+                label_text
+            )
+            
+            # Log the redaction
+            logging.info(f"Redacted {barcode_type} as {label_text} at coordinates: x={left}-{right}, y={top}-{bottom}, data: {barcode_data}")
             redaction_count += 1
+            barcode_counter += 1
             
         # Log info about what was detected but not redacted
         if detected_types and redaction_count == 0:
@@ -103,7 +117,8 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
 
 def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_types_to_redact=None):
     """
-    Process barcodes and QR codes in a digital PDF page.
+    Process barcodes and QR codes in a digital PDF page, using text labels instead of simple blackouts.
+    Uses the centralized text label processor for consistent label generation.
     
     Args:
         page: PyMuPDF page object
@@ -115,6 +130,8 @@ def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_typ
     Returns:
         int: number of barcodes redacted
     """
+    from .text_label_processor import generate_label_text, add_text_label_to_pdf_image, extract_font_info_from_pdf
+    
     if not redact_qr_codes:
         return 0
         
@@ -127,7 +144,7 @@ def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_typ
         # Convert to PIL Image
         pil_image = Image.open(io.BytesIO(base_image["image"]))
         
-        # Convert to CV2 format
+        # Convert to CV2 format for barcode detection
         if pil_image.mode == 'RGBA': 
             cv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGBA2BGR)
         elif pil_image.mode == 'P': 
@@ -148,9 +165,43 @@ def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_typ
             img_bboxes = page.get_image_rects(xref)
             if img_bboxes:
                 barcode_types = [f"{b.type} ({BARCODE_TYPES.get(b.type, 'Unknown')})" for b in barcodes_to_redact]
-                logging.info(f"Found barcodes of type {barcode_types} in image xref {xref}, adding blackout annot.")
+                logging.info(f"Found barcodes of type {barcode_types} in image xref {xref}")
+                
+                # Create counter for labeling barcodes
+                barcode_counter = 1
+                qr_counter = 1
+                
                 for img_rect in img_bboxes:
-                    page.add_redact_annot(img_rect, fill=(0, 0, 0))  # Blackout
+                    # Add the redaction annotation (black box)
+                    redact_annot = page.add_redact_annot(img_rect, fill=(0, 0, 0))
+                    
+                    # Now add text annotations on top for each barcode
+                    for barcode in barcodes_to_redact:
+                        # Generate label text using the centralized function
+                        entity_type = "QR_CODE" if barcode.type == "QRCODE" else "BARCODE"
+                        barcode_counter = qr_counter if barcode.type == "QRCODE" else barcode_counter
+                        label_text = generate_label_text(entity_type, barcode_counter)
+                        
+                        # Extract font information from the page
+                        font_name, font_size = extract_font_info_from_pdf(page)
+                        
+                        # Add the text label using the centralized function
+                        success = add_text_label_to_pdf_image(
+                            page, 
+                            img_rect, 
+                            label_text, 
+                            text_color=(1, 1, 1),  # White text
+                            font_name=font_name,
+                            font_size=font_size
+                        )
+                        
+                        if success:
+                            # Log the redaction
+                            logging.info(f"Added text label '{label_text}' to barcode in PDF")
+                            barcode_counter += 1
+                    
+                    # Apply the redactions
+                    page.apply_redactions()
                     barcode_count += len(barcodes_to_redact)
         elif barcodes:
             # Log that we found barcodes but they didn't match our filter

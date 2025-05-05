@@ -711,7 +711,8 @@ def apply_custom_filters(text, entities_to_redact_conf, custom_rules):
 
 def redact_entities_on_image(entities, char_to_box_map, image_array):
     """
-    Draw black boxes on the image to redact detected PII.
+    Draw text labels on the image to redact detected PII.
+    Uses the centralized text label processor for consistent label generation.
     
     Args:
         entities: List of entity results from analyzer
@@ -721,10 +722,19 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
     Returns:
         int: Number of entities redacted
     """
+    from .text_label_processor import generate_label_text, get_entity_counters, draw_text_label_on_image
+    
     redaction_count = 0
+    redacted_rects_on_page = set()
+    
+    # Get entity counters for all possible entity types in entities
+    entity_types = {entity.entity_type for entity in entities}
+    entity_counters = get_entity_counters(entity_types)
     
     for entity in entities:
         try:
+            entity_type = entity.entity_type
+            
             # Find all character boxes that overlap with this entity
             entity_boxes = []
             for char_pos, box in char_to_box_map.items():
@@ -734,7 +744,12 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
                 if (entity.start <= char_start < entity.end or 
                     entity.start < char_end <= entity.end or
                     (char_start <= entity.start and char_end >= entity.end)):
-                    entity_boxes.append(box)
+                    
+                    # Convert box to tuple for deduplication
+                    box_points = tuple(tuple(point) for point in box)
+                    if box_points not in redacted_rects_on_page:
+                        entity_boxes.append(box)
+                        redacted_rects_on_page.add(box_points)
             
             if not entity_boxes:
                 continue
@@ -756,8 +771,23 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
             max_x = min(image_array.shape[1] - 1, max_x + margin)
             max_y = min(image_array.shape[0] - 1, max_y + margin)
             
-            # Draw a black rectangle for redaction
-            cv2.rectangle(image_array, (min_x, min_y), (max_x, max_y), (0, 0, 0), -1)
+            # Generate label text using the centralized function
+            label_text = generate_label_text(entity_type, entity_counters[entity_type])
+            
+            # Increment counter for next occurrence of this entity type
+            entity_counters[entity_type] += 1
+            
+            # Draw the text label on the image with an appropriate font size
+            # Use a font size proportional to the redaction box height
+            font_size = max(10, int(min((max_y - min_y) * 0.75, 24)))
+            
+            image_array = draw_text_label_on_image(
+                image_array,
+                (min_x, min_y, max_x, max_y),
+                label_text,
+                font_size=font_size
+            )
+            
             redaction_count += 1
             
         except Exception as e:
