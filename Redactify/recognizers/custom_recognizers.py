@@ -15,6 +15,7 @@ from .entity_types import (
     INDIA_PASSPORT_ENTITY,
     EXAM_IDENTIFIER_ENTITY,
     QR_CODE_ENTITY,  # Added QR code entity
+    METADATA_ENTITY, # Added metadata entity
     # Score constants
     SCORE_HIGH_CONFIDENCE,
     SCORE_MEDIUM_HIGH_CONFIDENCE,
@@ -204,6 +205,49 @@ class QrCodeRecognizer(EntityRecognizer):
         # QR code detection is handled in the image processing code
         return []
 
+# --- Metadata Placeholder Recognizer ---
+class MetadataRecognizer(EntityRecognizer):
+    """
+    Recognizer for document metadata.
+    
+    This recognizer is a placeholder for the METADATA entity type and doesn't 
+    actively detect anything in text. Actual metadata extraction is handled by
+    the metadata processor module.
+    """
+    SUPPORTED_ENTITIES = [METADATA_ENTITY]
+    CONTEXT = ["metadata", "document properties", "author", "creator", "producer"]
+    
+    def __init__(
+        self,
+        supported_language: str = "en",
+        name: Optional[str] = "MetadataRecognizer",
+        supported_entities: Optional[List[str]] = None,
+        context: Optional[List[str]] = None,
+    ):
+        # Use provided context or default
+        context_to_use = context if context is not None else self.CONTEXT
+        super().__init__(
+            supported_entities=supported_entities if supported_entities else self.SUPPORTED_ENTITIES,
+            name=name,
+            supported_language=supported_language,
+            context=context_to_use
+        )
+        logger.info(f"Initialized {self.name}")
+
+    def load(self) -> None:
+        """No resources to load."""
+        pass
+        
+    def analyze(self, text: str, entities: List[str], nlp_artifacts: NlpArtifacts) -> List[RecognizerResult]:
+        """
+        This is a placeholder implementation that doesn't actually detect metadata in text.
+        Metadata detection happens in the metadata processing pipeline.
+        This method is required by the EntityRecognizer interface.
+        """
+        # This recognizer doesn't find anything in text - metadata extraction
+        # is handled in the metadata_processor.py module
+        return []
+
 # --- Pattern Recognizers (Simpler format matching) ---
 
 # 1. Aadhaar Number Recognizer (India) - Format only
@@ -323,6 +367,8 @@ custom_recognizer_list = [
         generic_exam_id_recognizer,
         # Add QR code recognizer
         QrCodeRecognizer(),
+        # Add Metadata recognizer
+        MetadataRecognizer(),
     ] if rec is not None  # Final check to ensure instance is valid
 ]
 

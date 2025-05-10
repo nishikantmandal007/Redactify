@@ -2,13 +2,18 @@
 # Redactify/services/celery_service.py
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init, worker_process_shutdown
 import os
+import logging
 
 # Import config values from our new core config module
 from ..core.config import (
     REDIS_URL, CELERY_TASK_SOFT_TIME_LIMIT, 
     CELERY_TASK_HARD_TIME_LIMIT
 )
+
+# Import GPU utilities
+from ..utils.gpu_utils import is_gpu_available, configure_gpu_memory, cleanup_gpu_resources
 
 # Define Celery task retry settings
 CELERY_TASK_AUTORETRY_FOR = (ConnectionRefusedError, TimeoutError)
@@ -66,6 +71,23 @@ def create_celery_app():
 
 # Create the default app instance
 celery = create_celery_app()
+
+# Register signal handlers for GPU initialization and cleanup
+@worker_process_init.connect
+def init_worker_process(**kwargs):
+    """Initialize GPU for worker processes."""
+    if is_gpu_available():
+        # Configure GPU memory to avoid OOM errors
+        configure_gpu_memory(memory_fraction=0.8)
+        logging.info("GPU acceleration enabled for Celery worker")
+    else:
+        logging.info("Celery worker running in CPU-only mode")
+
+@worker_process_shutdown.connect
+def shutdown_worker_process(**kwargs):
+    """Clean up GPU resources when worker processes terminate."""
+    cleanup_gpu_resources()
+    logging.debug("GPU resources cleaned up on worker shutdown")
 
 # This will be used by the main app to configure the tasks
 def configure_celery_tasks(celery_app):

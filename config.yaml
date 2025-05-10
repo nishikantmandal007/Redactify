@@ -10,6 +10,8 @@ presidio_config:
     nlp_engine_name: spacy
     models: [{ "lang_code": "en", "model_name": "en_core_web_trf" }] # Transformer model (high accuracy)
     # Alternative options: en_core_web_lg (large), en_core_web_md (medium), en_core_web_sm (small), en_core_web_trf
+    # Labels to ignore in the NER model output
+    labels_to_ignore: ["FAC"]
   supported_languages: ["en"]
   # Uncomment and customize the following to add custom recognizers:
   # recognizers:
@@ -39,7 +41,7 @@ max_file_size_mb: 100 # Maximum upload file size in megabytes
 # ====================================================================
 # PII Detection thresholds
 ocr_confidence_threshold: 0.1 # Lower threshold means more text will be detected (may include false positives)
-presidio_confidence_threshold: 0.35 # Higher threshold = stricter PII detection (may miss some PII)
+presidio_confidence_threshold: 0.25 # Higher threshold = stricter PII detection (may miss some PII)
 
 # Service URLs
 redis_url: redis://localhost:6379/0 # Redis connection for Celery tasks

@@ -18,10 +18,13 @@ layoutparser>=0.3.4  # For document layout analysis
 # PII Detection
 presidio-analyzer>=2.2.0  # Microsoft's PII detection library
 presidio-anonymizer>=2.2.0
+spacy>=3.2.0  # Required by Presidio for NLP
+pytesseract>=0.3.8  # Optional OCR engine
 
 # Web Interface
 Flask-Bootstrap>=3.3.7  # Bootstrap integration for Flask
 Flask-WTF>=1.0.0  # Form handling for Flask
+Flask-Session>=0.4.0  # Server-side session management
 
 # Utilities
 PyYAML>=6.0  # YAML parsing for configuration files
@@ -31,3 +34,15 @@ shapely>=1.8.0  # Geometric operations library
 psutil>=5.9.0  # System resource monitoring
 gunicorn>=20.1.0  # WSGI HTTP Server for production
 flower>=1.0.0  # Celery monitoring tool
+
+# Testing and Development
+pytest>=7.0.0  # Testing framework
+pytest-cov>=3.0.0  # Test coverage
+flake8>=4.0.0  # Code linting
+black>=22.0.0  # Code formatting
+
+# Additional Dependencies
+numpy>=1.21.0  # Numerical computing
+scipy>=1.8.0  # Scientific computing
+matplotlib>=3.5.0  # Data visualization
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.2.0/en_core_web_lg-3.2.0.tar.gz  # SpaCy model

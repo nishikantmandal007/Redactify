@@ -10,6 +10,7 @@ from functools import partial
 import re
 from typing import List, Dict, Any, Optional, Tuple, Set
 from ..recognizers.entity_types import QR_CODE_ENTITY
+from ..utils.gpu_utils import GPUResourceManager
 
 def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None, confidence_threshold=0.6, barcode_types_to_redact=None, task_context=None):
     """

@@ -572,3 +572,7 @@ class TestImageProcessor:
             
             # Verify the output path has the same extension
             assert result_path.endswith(ext)
+            result_path = process_image(path, [PIITypes.PERSON.value])
+            
+            # Verify the output path has the same extension
+            assert result_path.endswith(ext)

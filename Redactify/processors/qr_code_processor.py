@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import fitz  # PyMuPDF
 import os
+from ..utils.gpu_utils import is_gpu_available, get_gpu_enabled_opencv, accelerate_image_processing
 
 # Define all barcode types supported by pyzbar
 BARCODE_TYPES = {
@@ -38,6 +39,7 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
     """
     Detects and redacts specified barcode types in an image using text labels.
     Uses the centralized text label processor for consistent label generation.
+    Uses GPU acceleration when available.
     
     Args:
         image_array: numpy array of the image
@@ -52,9 +54,21 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
     redacted_image = image_array.copy()
     img_height, img_width = image_array.shape[:2]
     
+    # Use GPU acceleration for preprocessing if available
+    if is_gpu_available():
+        try:
+            # Preprocess the image with GPU acceleration to improve barcode detection
+            detection_image = accelerate_image_processing(image_array)
+            logging.debug("Using GPU-accelerated image processing for barcode detection")
+        except Exception as e:
+            logging.warning(f"GPU preprocessing failed, using original image: {e}")
+            detection_image = image_array
+    else:
+        detection_image = image_array
+    
     # Detect barcodes and QR codes
     try:
-        decoded_objects = pyzbar.decode(image_array)
+        decoded_objects = pyzbar.decode(detection_image)
         redaction_count = 0
         detected_types = set()
         barcode_counter = 1  # Starting counter for barcode labels
@@ -115,6 +129,59 @@ def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
         logging.error(f"Error during barcode detection: {e}", exc_info=True)
         return image_array, 0
 
+def enhance_barcode_detection(image_array):
+    """
+    Enhance image to improve barcode detection using GPU acceleration when available.
+    
+    Args:
+        image_array: numpy array of image
+        
+    Returns:
+        numpy array: enhanced image for better barcode detection
+    """
+    # Try GPU acceleration if available
+    if is_gpu_available():
+        try:
+            cuda = get_gpu_enabled_opencv()
+            if cuda is not None:
+                # Upload to GPU
+                gpu_img = cv2.cuda_GpuMat()
+                gpu_img.upload(image_array)
+                
+                # Convert to grayscale on GPU
+                gpu_gray = cv2.cuda.cvtColor(gpu_img, cv2.COLOR_BGR2GRAY)
+                
+                # Apply adaptive threshold on CPU (not available in CUDA)
+                enhanced_img = gpu_gray.download()
+                enhanced_img = cv2.adaptiveThreshold(
+                    enhanced_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                    cv2.THRESH_BINARY, 11, 2
+                )
+                
+                logging.debug("Applied GPU-accelerated image enhancement for barcode detection")
+                return enhanced_img
+        except Exception as e:
+            logging.warning(f"GPU enhancement failed, falling back to CPU: {e}")
+    
+    # CPU-based enhancement
+    try:
+        # Convert to grayscale
+        if len(image_array.shape) == 3:
+            gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image_array
+            
+        # Apply adaptive threshold to improve barcode contrast
+        enhanced = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 11, 2
+        )
+        
+        return enhanced
+    except Exception as e:
+        logging.warning(f"Image enhancement failed: {e}")
+        return image_array
+
 def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_types_to_redact=None):
     """
     Process barcodes and QR codes in a digital PDF page, using text labels instead of simple blackouts.
@@ -152,8 +219,11 @@ def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_typ
         else: 
             cv_image = cv2.cvtColor(np.array(pil_image.convert('RGB')), cv2.COLOR_RGB2BGR)
 
+        # Apply GPU-based enhancement if available
+        enhanced_image = enhance_barcode_detection(cv_image)
+        
         # Detect all barcodes
-        barcodes = pyzbar.decode(cv_image)
+        barcodes = pyzbar.decode(enhanced_image)
         
         # Filter by barcode type if specified
         if barcode_types_to_redact:
@@ -179,8 +249,14 @@ def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_typ
                     for barcode in barcodes_to_redact:
                         # Generate label text using the centralized function
                         entity_type = "QR_CODE" if barcode.type == "QRCODE" else "BARCODE"
-                        barcode_counter = qr_counter if barcode.type == "QRCODE" else barcode_counter
-                        label_text = generate_label_text(entity_type, barcode_counter)
+                        counter = qr_counter if barcode.type == "QRCODE" else barcode_counter
+                        label_text = generate_label_text(entity_type, counter)
+                        
+                        # Update the appropriate counter
+                        if barcode.type == "QRCODE":
+                            qr_counter += 1
+                        else:
+                            barcode_counter += 1
                         
                         # Extract font information from the page
                         font_name, font_size = extract_font_info_from_pdf(page)
@@ -198,7 +274,6 @@ def process_qr_in_digital_pdf(page, doc, xref, redact_qr_codes=True, barcode_typ
                         if success:
                             # Log the redaction
                             logging.info(f"Added text label '{label_text}' to barcode in PDF")
-                            barcode_counter += 1
                     
                     # Apply the redactions
                     page.apply_redactions()

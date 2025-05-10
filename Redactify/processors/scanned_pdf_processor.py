@@ -23,6 +23,8 @@ import queue
 import weakref
 # Import QR_CODE_ENTITY
 from ..recognizers.entity_types import QR_CODE_ENTITY
+from ..utils.gpu_utils import GPUResourceManager
+from ..core.analyzers import AnalyzerFactory
 
 # Add a timeout mechanism to prevent hanging on problematic pages
 class TimeoutError(Exception):
@@ -41,24 +43,52 @@ def time_limit(seconds):
 
 # Function to run OCR in a separate thread to isolate crashes
 def run_ocr_safely(ocr, img_array):
-    """Run OCR in a separate process to isolate crashes"""
+    """
+    Run OCR in a separate process to isolate crashes.
+    Uses the centralized GPU resource manager for consistent resource handling.
+    
+    Args:
+        ocr: PaddleOCR engine instance
+        img_array: Numpy array containing the image
+        
+    Returns:
+        Tuple of (ocr_result, error_message)
+    """
+    # Get GPU manager singleton
+    gpu_manager = GPUResourceManager.get_instance()
+    
     # Use spawn context for manager and process to avoid daemon inheritance
     ctx = get_context('spawn')
     manager = ctx.Manager()
     result_queue = manager.Queue()
+    
     def ocr_worker(q, img):
         try:
+            # Apply GPU acceleration for preprocessing if available
+            if gpu_manager.is_available():
+                # Use the GPU manager for image enhancement
+                img = gpu_manager.enhance_for_ocr(img)
+                
             ocr_result = ocr.ocr(img, cls=False)
             q.put((ocr_result, None))
         except Exception as e:
             q.put((None, str(e)))
+            # Try to clean up GPU resources on error
+            if gpu_manager.is_available():
+                gpu_manager.cleanup(force_gc=False)
+    
     process = ctx.Process(target=ocr_worker, args=(result_queue, img_array))
     process.daemon = False
     process.start()
     process.join(timeout=30)
+    
     if process.is_alive():
         process.terminate()
+        # Try to clean up GPU resources if OCR timed out
+        if gpu_manager.is_available():
+            gpu_manager.cleanup()
         return None, "OCR process timed out"
+    
     try:
         return result_queue.get_nowait()
     except Exception:
@@ -84,21 +114,60 @@ def aggressive_cleanup():
 # Memory-optimized image processing
 def optimize_image(img_array, target_size=None):
     """
-    Optimizes image to reduce memory footprint while maintaining quality
+    Optimizes image to reduce memory footprint while maintaining quality.
+    Uses the centralized GPU resource manager for consistent GPU resource handling.
+    
+    Args:
+        img_array: Numpy array containing the image
+        target_size: Optional tuple of (max_width, max_height)
+        
+    Returns:
+        np.ndarray: Optimized image array
     """
     try:
+        # Get GPU manager singleton
+        gpu_manager = GPUResourceManager.get_instance()
+        
         # Convert to optimized format if colored
         if len(img_array.shape) == 3 and img_array.shape[2] == 3:
             # For images, use 8-bit per channel
             if img_array.dtype != np.uint8:
                 img_array = img_array.astype(np.uint8)
                 
-        # Resize if needed and a target size is specified
+        # Check if image needs resizing
         if target_size and (img_array.shape[0] > target_size[0] or img_array.shape[1] > target_size[1]):
+            # Calculate scale factor preserving aspect ratio
             scale = min(target_size[0] / img_array.shape[0], target_size[1] / img_array.shape[1])
-            new_size = (int(img_array.shape[1] * scale), int(img_array.shape[0] * scale))
-            img_array = cv2.resize(img_array, new_size, interpolation=cv2.INTER_AREA)
+            new_width = int(img_array.shape[1] * scale)
+            new_height = int(img_array.shape[0] * scale)
             
+            # Try GPU-accelerated resize through the resource manager
+            if gpu_manager.is_available():
+                try:
+                    # Use OpenCV CUDA through the manager
+                    cuda = gpu_manager.get_opencv_cuda()
+                    if cuda is not None:
+                        gpu_img = cv2.cuda_GpuMat()
+                        gpu_img.upload(img_array)
+                        gpu_img = cv2.cuda.resize(gpu_img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                        img_array = gpu_img.download()
+                        logging.debug(f"GPU-accelerated resize: {img_array.shape[1]}x{img_array.shape[0]} -> {new_width}x{new_height}")
+                        return img_array
+                except Exception as e:
+                    logging.warning(f"GPU resize failed, falling back to CPU: {e}")
+                    # Try to clean up GPU resources after failure
+                    gpu_manager.cleanup(force_gc=False)
+            
+            # CPU fallback
+            img_array = cv2.resize(img_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            
+        # Apply GPU image enhancement if available
+        if gpu_manager.is_available():
+            try:
+                img_array = gpu_manager.process_image(img_array)
+            except Exception as e:
+                logging.warning(f"GPU image enhancement failed: {e}")
+                
         return img_array
     except Exception as e:
         logging.warning(f"Image optimization failed: {e}")
@@ -140,8 +209,20 @@ def memory_safe_operation(func):
     return wrapper
 
 def prepare_image_for_ocr(img_array):
-    """Prepare image for OCR to improve recognition and reduce memory usage"""
+    """
+    Prepare image for OCR to improve recognition and reduce memory usage.
+    Uses the centralized GPU Resource Manager for consistent GPU acceleration.
+    
+    Args:
+        img_array: Numpy array containing the image
+        
+    Returns:
+        np.ndarray: Prepared image array optimized for OCR
+    """
     try:
+        # Get GPU manager singleton
+        gpu_manager = GPUResourceManager.get_instance()
+        
         # Check if image is too large and resize if needed
         height, width = img_array.shape[:2]
         max_dimension = 3000  # Reduced from 3500 to improve memory usage
@@ -150,10 +231,39 @@ def prepare_image_for_ocr(img_array):
             scale = max_dimension / max(height, width)
             new_height = int(height * scale)
             new_width = int(width * scale)
-            img_array = cv2.resize(img_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
-            logging.info(f"Resized large image from {width}x{height} to {new_width}x{new_height}")
+            
+            # Try GPU-accelerated resize through the resource manager
+            if gpu_manager.is_available():
+                try:
+                    # Use OpenCV CUDA through the manager
+                    cuda = gpu_manager.get_opencv_cuda()
+                    if cuda is not None:
+                        gpu_img = cv2.cuda_GpuMat()
+                        gpu_img.upload(img_array)
+                        gpu_img = cv2.cuda.resize(gpu_img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                        img_array = gpu_img.download()
+                        logging.info(f"GPU-accelerated resize from {width}x{height} to {new_width}x{new_height}")
+                    else:
+                        img_array = cv2.resize(img_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                        logging.info(f"CPU resize from {width}x{height} to {new_width}x{new_height}")
+                except Exception as e:
+                    logging.warning(f"GPU resize failed, falling back to CPU: {e}")
+                    img_array = cv2.resize(img_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                    logging.info(f"CPU resize from {width}x{height} to {new_width}x{new_height}")
+            else:
+                img_array = cv2.resize(img_array, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                logging.info(f"CPU resize from {width}x{height} to {new_width}x{new_height}")
         
-        # Convert to grayscale for OCR if colored
+        # Apply GPU-accelerated text enhancement optimized for OCR
+        if gpu_manager.is_available():
+            try:
+                return gpu_manager.enhance_for_ocr(img_array)
+            except Exception as e:
+                logging.warning(f"GPU image enhancement failed, falling back to CPU: {e}")
+                # Try to clean up GPU resources after failure
+                gpu_manager.cleanup(force_gc=False)
+        
+        # CPU fallback for image preparation
         if len(img_array.shape) == 3 and img_array.shape[2] == 3:
             gray_img = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
             
@@ -179,7 +289,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                        barcode_types_to_redact=None, task_context=None, reduced_quality=False):
     """
     Process a scanned (image-based) PDF file and redact PII.
-    Optimized with batched processing and parallel execution.
+    Optimized with batched processing, parallel execution, and GPU acceleration.
     
     Args:
         pdf_path: Path to the PDF file
@@ -200,20 +310,28 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
     if not os.path.exists(pdf_path):
         logging.error(f"PDF file not found: {pdf_path}")
         raise FileNotFoundError(f"Input file not found: {pdf_path}")
-        
+    
+    # Use OCR from AnalyzerFactory if not provided
     if not ocr:
-        logging.error("OCR engine not initialized")
-        raise ValueError("OCR engine not available")
+        ocr = AnalyzerFactory.get_ocr_engine()
+        if not ocr:
+            logging.error("OCR engine not initialized")
+            raise ValueError("OCR engine not available")
         
     # Set up temp directory if not provided
     if not temp_dir:
         temp_dir = os.path.join(os.path.dirname(os.path.dirname(pdf_path)), "temp_files")
         os.makedirs(temp_dir, exist_ok=True)
     
-    # Constants for optimization - adjusted based on reduced_quality flag
-    MAX_WORKERS = 1 if reduced_quality else min(max(os.cpu_count() or 2 - 1, 1), 2)
+    # Constants for optimization - adjusted based on reduced_quality flag and GPU availability
+    # Use more workers when GPU is available and not in reduced_quality mode
+    MAX_WORKERS = 1 if reduced_quality else min(max(os.cpu_count() or 2 - 1, 1), 3 if GPUResourceManager.is_gpu_available() else 2)
     BATCH_SIZE = 1  # Always process 1 page at a time for better stability
     OCR_TIMEOUT = 45 if reduced_quality else 60  # Reduced timeout for low memory situations
+    
+    # Log acceleration status
+    gpu_status = "GPU acceleration enabled" if GPUResourceManager.is_gpu_available() else "CPU mode"
+    logging.info(f"Processing scanned PDF: {pdf_path} ({gpu_status})")
     
     # Check if QR code redaction is requested
     redact_qr_codes = "QR_CODE" in pii_types_selected
@@ -337,7 +455,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                         img = pdf_images[page_idx]
                         img_array = np.array(img)
                         
-                        # Optimize image to reduce memory footprint
+                        # Optimize image to reduce memory footprint - use GPU if available
                         max_dim = 2000 if reduced_quality else 3000
                         img_array = optimize_image(img_array, target_size=(max_dim, max_dim))
                         
@@ -363,7 +481,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                         # Ensure img_array is the potentially redacted one
                         img = Image.fromarray(img_array)
                         
-                        # Prepare image for OCR to improve stability
+                        # Prepare image for OCR to improve stability - use GPU if available
                         try:
                             ocr_img_array = prepare_image_for_ocr(img_array)
                         except Exception as prep_err:
@@ -563,7 +681,9 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
         # Force garbage collection to clean up memory
         gc.collect()
         
-        logging.info(f"Redacted scanned PDF saved to {output_pdf_path} with {total_redactions} text & {total_barcode_redactions} barcode redactions")
+        # Log GPU status in output message
+        accel_status = "with GPU acceleration" if GPUResourceManager.is_gpu_available() else "using CPU"
+        logging.info(f"Redacted scanned PDF {accel_status} saved to {output_pdf_path} with {total_redactions} text & {total_barcode_redactions} barcode redactions")
         
         if task_context:
             task_context.update_state(
@@ -731,6 +851,9 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
     entity_types = {entity.entity_type for entity in entities}
     entity_counters = get_entity_counters(entity_types)
     
+    # Try GPU-accelerated drawing if available
+    use_gpu = GPUResourceManager.is_gpu_available()
+    
     for entity in entities:
         try:
             entity_type = entity.entity_type
@@ -781,17 +904,128 @@ def redact_entities_on_image(entities, char_to_box_map, image_array):
             # Use a font size proportional to the redaction box height
             font_size = max(10, int(min((max_y - min_y) * 0.75, 24)))
             
-            image_array = draw_text_label_on_image(
-                image_array,
-                (min_x, min_y, max_x, max_y),
-                label_text,
-                font_size=font_size
-            )
-            
-            redaction_count += 1
+            # Use GPU-accelerated drawing if available
+            if use_gpu and GPUResourceManager.get_gpu_enabled_opencv() is not None:
+                try:
+                    cuda = GPUResourceManager.get_gpu_enabled_opencv()
+                    # Upload to GPU
+                    gpu_img = cv2.cuda_GpuMat()
+                    gpu_img.upload(image_array)
+                    
+                    # Download for text drawing (not available on GPU)
+                    cpu_img = gpu_img.download()
+                    
+                    # Draw redaction box
+                    cv2.rectangle(cpu_img, (int(min_x), int(min_y)), (int(max_x), int(max_y)), 
+                                 (50, 50, 50), -1)
+                    
+                    # Draw text
+                    cv2.putText(cpu_img, label_text, (int(min_x)+5, int(min_y)+20), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                    
+                    # Upload back to GPU
+                    gpu_img.upload(cpu_img)
+                    
+                    # Download final result
+                    image_array = gpu_img.download()
+                    redaction_count += 1
+                except Exception as e:
+                    logging.warning(f"GPU-accelerated drawing failed, falling back to CPU: {e}")
+                    # Fall back to standard drawing
+                    image_array = draw_text_label_on_image(
+                        image_array,
+                        (min_x, min_y, max_x, max_y),
+                        label_text,
+                        font_size=font_size
+                    )
+                    redaction_count += 1
+            else:
+                # Use standard drawing function
+                image_array = draw_text_label_on_image(
+                    image_array,
+                    (min_x, min_y, max_x, max_y),
+                    label_text,
+                    font_size=font_size
+                )
+                redaction_count += 1
             
         except Exception as e:
             logging.debug(f"Error redacting entity: {e}")
             continue
     
     return redaction_count
+
+class ScannedPDFProcessor:
+    """Class for processing scanned PDFs with GPU acceleration."""
+    
+    def __init__(self):
+        """Initialize the processor with centralized GPU resource management."""
+        # Get GPU manager singleton
+        self.gpu_manager = GPUResourceManager.get_instance()
+        
+        # Check if GPU is available
+        self.use_gpu = self.gpu_manager.is_available()
+        
+        if self.use_gpu:
+            # Initialize GPU for PaddleOCR
+            self.gpu_manager.initialize_for_paddle()
+            logging.info("ScannedPDFProcessor initialized with GPU acceleration")
+        else:
+            logging.info("ScannedPDFProcessor initialized with CPU processing")
+    
+    def process(self, pdf_path, pii_types, custom_rules=None, 
+                confidence_threshold=0.6, temp_dir=None, 
+                barcode_types=None, reduced_quality=False, task_context=None):
+        """
+        Process a scanned PDF file to detect and redact PII.
+        Uses centralized GPU resource management for consistent performance.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            pii_types: List of PII entity types to redact
+            custom_rules: Dict of custom keyword and regex rules
+            confidence_threshold: Minimum confidence score for entity detection
+            temp_dir: Directory to store temporary files
+            barcode_types: List of barcode types to redact
+            reduced_quality: Use reduced quality settings (for low memory)
+            task_context: Optional Celery task context for progress updates
+            
+        Returns:
+            Tuple[str, Set[str]]: Path to redacted PDF and redacted entity types
+        """
+        # Get analyzer and OCR engine from factory
+        analyzer = AnalyzerFactory.get_analyzer()
+        ocr = AnalyzerFactory.get_ocr_engine()
+        
+        if not analyzer or not ocr:
+            logging.error("Failed to initialize analyzer or OCR engine")
+            raise ValueError("Required components not available")
+        
+        try:
+            # Process the PDF
+            result = redact_scanned_pdf(
+                pdf_path=pdf_path,
+                analyzer=analyzer,
+                ocr=ocr,
+                pii_types_selected=pii_types,
+                custom_rules=custom_rules,
+                confidence_threshold=confidence_threshold,
+                temp_dir=temp_dir,
+                barcode_types_to_redact=barcode_types,
+                reduced_quality=reduced_quality,
+                task_context=task_context
+            )
+            
+            # Cleanup GPU resources after processing
+            if self.use_gpu:
+                self.gpu_manager.cleanup(force_gc=False)
+                
+            return result
+        
+        except Exception as e:
+            # Try to clean up GPU resources on error
+            if self.use_gpu:
+                self.gpu_manager.force_cleanup()
+            
+            # Re-raise the exception
+            raise

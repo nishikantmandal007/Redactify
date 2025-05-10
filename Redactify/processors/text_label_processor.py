@@ -525,10 +525,13 @@ def add_text_label_to_pdf_image(page, img_rect, label_text, text_color=(1, 1, 1)
             # Make sure the provided font name is safe
             font_name = get_pdf_safe_font(font_name)
         
+        # Calculate center of rectangle manually
+        center_x = (img_rect[0] + img_rect[2]) / 2
+        center_y = (img_rect[1] + img_rect[3]) / 2
+        
         # Draw directly on the page instead of using annotation
-        rect_center = img_rect.center
         page.insert_text(
-            rect_center,
+            fitz.Point(center_x, center_y),
             label_text,
             fontname=font_name,
             fontsize=font_size or 12,
@@ -542,9 +545,13 @@ def add_text_label_to_pdf_image(page, img_rect, label_text, text_color=(1, 1, 1)
         
         # Fallback to a simple method
         try:
+            # Calculate center of rectangle manually for fallback
+            center_x = (img_rect[0] + img_rect[2]) / 2
+            center_y = (img_rect[1] + img_rect[3]) / 2
+            
             # Use a guaranteed built-in font
             page.insert_text(
-                img_rect.center,
+                fitz.Point(center_x, center_y),
                 label_text,
                 fontname="Helvetica",
                 fontsize=12,
@@ -553,3 +560,4 @@ def add_text_label_to_pdf_image(page, img_rect, label_text, text_color=(1, 1, 1)
             return True
         except Exception as e2:
             logging.error(f"Fallback text label method also failed: {e2}")
+            return False
