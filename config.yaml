@@ -11,17 +11,12 @@ presidio_config:
     models: [{ "lang_code": "en", "model_name": "en_core_web_trf" }] # Transformer model (high accuracy)
     # Alternative options: en_core_web_lg (large), en_core_web_md (medium), en_core_web_sm (small), en_core_web_trf
     # Labels to ignore in the NER model output
-    labels_to_ignore: ["FAC"]
+    labels_to_ignore: ["FAC", "ORG"]
+    allow_all_entity_types: true # Allow all entity types to be considered for recognition
   supported_languages: ["en"]
-  # Uncomment and customize the following to add custom recognizers:
-  # recognizers:
-  #   - name: "Student ID Recognizer"
-  #     supported_language: "en"
-  #     supported_entity: "STUDENT_ID"
-  #     patterns:
-  #       - name: "student id pattern"
-  #         regex: "\\b[A-Z]\\d{8}\\b"
-  #         score: 0.7
+  # Add name context words to enhance recognition
+  context_words:
+    PERSON: ["name", "person", "mr", "mrs", "ms", "dr", "prof"]
 
 # ====================================================================
 # FILE STORAGE CONFIGURATION
@@ -41,7 +36,7 @@ max_file_size_mb: 100 # Maximum upload file size in megabytes
 # ====================================================================
 # PII Detection thresholds
 ocr_confidence_threshold: 0.1 # Lower threshold means more text will be detected (may include false positives)
-presidio_confidence_threshold: 0.25 # Higher threshold = stricter PII detection (may miss some PII)
+presidio_confidence_threshold: 0.05 # Lowered for better detection of names (especially all caps)
 
 # Service URLs
 redis_url: redis://localhost:6379/0 # Redis connection for Celery tasks
@@ -63,6 +58,5 @@ celery_task_hard_time_limit: 660 # 11 minutes - forceful termination
 # ====================================================================
 # LOGGING CONFIGURATION
 # ====================================================================
-# Uncomment to customize logging
-# log_level: DEBUG  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
-# log_file: logs/redactify.log  # Log file location
+# Enable logging for text extraction
+log_level: INFO # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL

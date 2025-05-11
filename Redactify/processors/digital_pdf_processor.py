@@ -53,6 +53,10 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
         doc = fitz.open(pdf_path)
         total_pages = len(doc)
         
+        # Add detailed logging for the PDF being processed
+        logging.info(f"Beginning text extraction from digital PDF: {os.path.basename(pdf_path)}")
+        logging.info(f"Processing {total_pages} pages in digital PDF")
+        
         # Track metrics for logging
         redaction_count = 0
         qr_redaction_count = 0
@@ -82,6 +86,12 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                     
                     # 1. Text Analysis & Redaction
                     text = page.get_text()
+                    
+                    # Add detailed logging for extracted text
+                    logging.info(f"=== TEXT EXTRACTED FROM PAGE {page_num+1} ===")
+                    logging.info(text)
+                    logging.info("="*50)
+                    
                     if text.strip():  # Only analyze if there's text content
                         # Analyze text for PII entities with Presidio
                         analyzer_results = analyzer.analyze(
@@ -89,6 +99,15 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                             entities=pii_types_selected,
                             language='en'
                         )
+                        
+                        # Log the analyzer results for debugging
+                        if analyzer_results:
+                            logging.info(f"Found {len(analyzer_results)} potential PII entities on page {page_num+1}")
+                            for entity in analyzer_results:
+                                entity_text = text[entity.start:entity.end]
+                                logging.info(f"  Entity: {entity.entity_type}, Text: '{entity_text}', Score: {entity.score}")
+                        else:
+                            logging.info(f"No PII entities found on page {page_num+1}")
                         
                         # Filter results by confidence threshold
                         entities_to_redact_conf = [

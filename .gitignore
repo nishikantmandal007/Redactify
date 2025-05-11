@@ -66,7 +66,13 @@ temp_files/*
 !temp_files/.gitkeep
 data/*
 !data/.gitkeep
-
+# Node.js dependencies
+# Node.js dependencies
+node_modules/
+frontend/node_modules/
+**/node_modules/
+npm-debug.log
+yarn-error.log
 # Generated PDF files
 *.pdf
 !example_pdfs/*.pdf  # Keep example PDFs for testing if needed

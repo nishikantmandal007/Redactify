@@ -350,7 +350,29 @@ def result(task_id):
                     logging.error(f"Path traversal attempt detected for task {task_id}: {safe_filename}")
                     raise NotFound()
 
-                return send_from_directory(TEMP_DIR, safe_filename, as_attachment=True)
+                # Explicitly set the appropriate MIME type based on file extension
+                from flask import send_file
+                if safe_filename.lower().endswith('.pdf'):
+                    return send_file(full_path, mimetype='application/pdf', as_attachment=True, 
+                                    download_name=safe_filename)
+                elif safe_filename.lower().endswith(('.jpg', '.jpeg')):
+                    return send_file(full_path, mimetype='image/jpeg', as_attachment=True,
+                                    download_name=safe_filename)
+                elif safe_filename.lower().endswith('.png'):
+                    return send_file(full_path, mimetype='image/png', as_attachment=True,
+                                    download_name=safe_filename)
+                elif safe_filename.lower().endswith('.gif'):
+                    return send_file(full_path, mimetype='image/gif', as_attachment=True,
+                                    download_name=safe_filename)
+                elif safe_filename.lower().endswith('.bmp'):
+                    return send_file(full_path, mimetype='image/bmp', as_attachment=True,
+                                    download_name=safe_filename)
+                elif safe_filename.lower().endswith(('.tiff', '.tif')):
+                    return send_file(full_path, mimetype='image/tiff', as_attachment=True,
+                                    download_name=safe_filename)
+                else:
+                    # Fallback for other file types
+                    return send_from_directory(TEMP_DIR, safe_filename, as_attachment=True)
             except FileNotFoundError:
                 logging.error(f"Result file {safe_filename} not found in {TEMP_DIR} for task {task_id}.")
                 flash('Result file not found. It might have been cleaned up or failed to save.', 'error')

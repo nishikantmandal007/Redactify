@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 # Redactify/services/celery_service.py
+import os
+import logging
+import multiprocessing
+
+# Set the multiprocessing start method to 'spawn' for CUDA compatibility
+# This must be done before importing any CUDA-related libraries
+if 'mp_context' not in globals():
+    # Only set once to avoid warnings
+    try:
+        multiprocessing.set_start_method('spawn')
+        mp_context = multiprocessing.get_context('spawn')
+    except RuntimeError:
+        # If already set, just get the context
+        mp_context = multiprocessing.get_context()
+
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
-import os
-import logging
 
 # Import config values from our new core config module
 from ..core.config import (
@@ -77,9 +90,13 @@ celery = create_celery_app()
 def init_worker_process(**kwargs):
     """Initialize GPU for worker processes."""
     if is_gpu_available():
-        # Configure GPU memory to avoid OOM errors
-        configure_gpu_memory(memory_fraction=0.8)
-        logging.info("GPU acceleration enabled for Celery worker")
+        try:
+            # Configure GPU memory to avoid OOM errors
+            configure_gpu_memory(memory_fraction=0.8)
+            logging.info("GPU acceleration enabled for Celery worker")
+        except Exception as e:
+            logging.warning(f"Error configuring GPU memory: {e}")
+            logging.info("GPU acceleration enabled for Celery worker")
     else:
         logging.info("Celery worker running in CPU-only mode")
 

@@ -5,6 +5,14 @@ PyMuPDF>=1.18.0  # For PDF processing
 celery>=5.2.0  # For background task processing
 redis>=3.5.3  # Required for Celery backend
 
+# API Framework
+fastapi>=0.104.0  # FastAPI framework
+uvicorn>=0.23.2  # ASGI server for FastAPI
+python-multipart>=0.0.6  # For file uploads in FastAPI
+
+# Frontend Dependencies
+Node.js>=18.0.0  # Will be installed separately, not via pip
+
 # PDF Processing
 pdf2image>=1.16.0  # For converting PDF pages to images
 pyzbar>=0.1.8  # For QR code detection
@@ -34,6 +42,13 @@ shapely>=1.8.0  # Geometric operations library
 psutil>=5.9.0  # System resource monitoring
 gunicorn>=20.1.0  # WSGI HTTP Server for production
 flower>=1.0.0  # Celery monitoring tool
+
+# API Documentation
+pydantic>=2.4.2  # Data validation for FastAPI
+
+# CORS Support
+starlette>=0.27.0  # ASGI toolkit (used by FastAPI)
+aiofiles>=23.2.1  # For async file operations
 
 # Testing and Development
 pytest>=7.0.0  # Testing framework

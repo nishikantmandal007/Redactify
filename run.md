@@ -130,3 +130,7 @@ Access the monitoring dashboard at http://localhost:5555
 3. Select the PII types to detect and redact
 4. Submit the form to process the file
 5. Download the redacted PDF once processing is complete
+
+```
+python -m Redactify.main --production
+```
