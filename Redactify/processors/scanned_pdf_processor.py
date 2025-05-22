@@ -5,7 +5,7 @@ import os
 import logging
 import numpy as np
 import cv2
-from PIL import Image, ImageDraw # Added ImageDraw for visual debugging
+from PIL import Image, ImageDraw, ImageFont # Added ImageFont
 from pdf2image import convert_from_path
 import fitz  # PyMuPDF
 from .qr_code_processor import detect_and_redact_qr_codes
@@ -439,6 +439,14 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                 
             total_pages = len(pdf_images)
             logging.info(f"PDF has {total_pages} pages")
+
+            # Performance optimization: Disable visual debugging for very large documents
+            if total_pages > 50 and enable_visual_debug: # Threshold can be configured
+                logging.warning(
+                    f"Document has {total_pages} pages. "
+                    f"Disabling visual debugging to conserve resources and improve performance."
+                )
+                enable_visual_debug = False # Override the parameter for this run
             
             if task_context:
                 task_context.update_state(
@@ -598,7 +606,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                     except Exception as e:
                         logging.error(f"Error processing page {page_idx}: {e}", exc_info=True)
                 
-                return batch_results, batch_redactions, batch_barcode_redactions, batch_redacted_types # Return types set
+                return batch_redactions, batch_barcode_redactions, batch_results, batch_redacted_types
             
             # Process sequentially if the document is large or in reduced quality mode
             if total_pages > 15 or reduced_quality:
@@ -624,7 +632,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                 for i, future in enumerate(concurrent.futures.as_completed(futures)):
                     try:
                         # Unpack results including the redacted types set
-                        batch_results, batch_redactions, batch_barcode_redactions, batch_redacted_types = future.result()
+                        batch_redactions, batch_barcode_redactions, batch_results, batch_redacted_types = future.result()
                         all_processed_pages.extend(batch_results)
                         total_redactions += batch_redactions
                         total_barcode_redactions += batch_barcode_redactions
@@ -867,20 +875,77 @@ def apply_custom_filters(text, entities_to_redact_conf, custom_rules):
         
     return filtered_entities
 
-def redact_entities_on_image(entities, char_to_box_map, image_array, debug_image_path_prefix=None): # Added debug_image_path_prefix
+def draw_text_label_on_image(draw_obj, box, label_text, font_path=None, font_size=12, text_color=(255, 255, 255), bg_color=(0, 0, 0)):
+    """Draws a text label with a background on a PIL ImageDraw object."""
+    try:
+        # Try a sequence of common fonts
+        font_options = []
+        if font_path and os.path.exists(font_path): # User-provided font takes precedence
+            font_options.append(font_path)
+        
+        # Add other common font names/paths to try.
+        # Order can be adjusted based on expected environments.
+        font_options.extend([
+            "DejaVuSans.ttf",  # Common on Linux
+            "arial.ttf",       # Common on Windows/macOS
+            # More specific paths can be added but might reduce portability
+            # e.g., "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ])
+
+        font = None
+        for f_option in font_options:
+            if not f_option: continue # Skip if font_path was None and ended up in list
+            try:
+                font = ImageFont.truetype(f_option, font_size)
+                logging.debug(f"Loaded font: {f_option} with size {font_size}")
+                break  # Stop if font is successfully loaded
+            except IOError:
+                logging.debug(f"Font not found or could not be read: {f_option}")
+            except Exception as e_font: # Catch other potential font loading errors
+                logging.debug(f"Error loading font {f_option}: {e_font}")
+        
+        if not font:
+            logging.warning("All specified/common fonts failed to load. Falling back to default font.")
+            font = ImageFont.load_default()
+            # Note: ImageFont.load_default() returns a pre-sized bitmap font.
+            # The requested font_size might not be honored precisely.
+    except Exception as e: # Catch-all for any unexpected error during font setup
+        logging.error(f"Critical error during font loading process, using default: {e}", exc_info=True)
+        font = ImageFont.load_default()
+
+    # Calculate text size and position
+    text_width, text_height = draw_obj.textsize(label_text, font=font)
+    box_width = box[2] - box[0]
+    box_height = box[3] - box[1]
+    
+    # Center the text
+    x = box[0] + (box_width - text_width) / 2
+    y = box[1] + (box_height - text_height) / 2
+
+    # Draw the background rectangle
+    draw_obj.rectangle(box, fill=bg_color)
+
+    # Draw the text
+    draw_obj.text((x, y), label_text, font=font, fill=text_color)
+
+def redact_entities_on_image(entities_with_pii_text, ocr_word_segments, image_array, char_to_box_map=None, debug_image_path_prefix=None):
     """
-    Draw text labels on the image to redact detected PII.
+    Draw text labels on the image to redact detected PII using OCR word segments.
     Uses the centralized text label processor for consistent label generation.
-    Optionally saves a debug image showing character boxes and redaction areas.
+    Optionally saves a debug image showing OCR word boxes, approximated character boxes, and redaction areas.
     
     Args:
-        entities: List of entity results from analyzer
-        char_to_box_map: Mapping from character positions to box coordinates
-        image_array: Numpy array containing the image (modified in place)
+        entities_with_pii_text: List of dicts, where each dict contains 'entity' 
+                                (Presidio RecognizerResult) and 'pii_text'.
+        ocr_word_segments: List of dicts from extract_ocr_results, each with 'text', 
+                           'box' (coordinates), 'start_char_offset', 'end_char_offset'.
+        image_array: Numpy array containing the image (modified in place).
+        char_to_box_map: Optional mapping from character positions to approximated 
+                         box coordinates (primarily for debug drawing).
         debug_image_path_prefix: If provided, save a diagnostic image with this prefix.
         
     Returns:
-        int: Number of entities redacted
+        int: Number of entities redacted.
     """
     from .text_label_processor import generate_label_text, get_entity_counters, draw_text_label_on_image
     
@@ -903,7 +968,9 @@ def redact_entities_on_image(entities, char_to_box_map, image_array, debug_image
             # Draw approximated character boxes (BLUE) from char_to_box_map if available
             if char_to_box_map and debug_draw:
                 for char_box_coords_list in char_to_box_map.values():
-                    if len(char_box_coords_list) == 4:
+                    # Ensure char_box_coords_list is a list of 4 points, each point [x,y]
+                    if isinstance(char_box_coords_list, list) and len(char_box_coords_list) == 4 and \
+                       all(isinstance(pt, list) and len(pt) == 2 for pt in char_box_coords_list):
                         rect_coords = [char_box_coords_list[0][0], char_box_coords_list[0][1],
                                        char_box_coords_list[2][0], char_box_coords_list[2][1]]
                         debug_draw.rectangle(rect_coords, outline=(0, 0, 255, 100), width=1) # Light Blue
@@ -994,26 +1061,46 @@ def redact_entities_on_image(entities, char_to_box_map, image_array, debug_image
         redaction_count += 1
 
         # If debugging, draw this new redaction box on the debug_image
-        if debug_image_path_prefix and draw: # Ensure 'draw' object is valid
+        if debug_image_path_prefix and debug_draw: # Ensure 'debug_draw' object is valid
             try:
-                draw.rectangle([(min_x, min_y), (max_x, max_y)], fill=(255, 0, 0, 128), outline="red", width=2)
+                debug_draw.rectangle([(min_x, min_y), (max_x, max_y)], fill=(255, 0, 0, 128), outline="red", width=2)
                 # Attempt to draw text; choose a basic font if specific one not loaded
                 # This text drawing on debug image is optional and can be simple
-                draw.text((min_x + 5, min_y + 5), label_text, fill=(255,255,255,255)) # White text
+                debug_draw.text((min_x + 5, min_y + 5), label_text, fill=(255,255,255,255)) # White text
             except Exception as e_debug_text:
-                logging.debug(f"Could not draw text on debug image: {e_debug_text}")
+                logging.warning(f"Visual debug text drawing on redaction box failed: {e_debug_text}")
+                
 
     # --- Visual Debugging: Save image (moved outside the loop) ---
-    if debug_image_path_prefix and debug_image and draw: # Ensure draw is also checked
+    if debug_pil_image and debug_image_path_prefix: # Ensure debug_draw is also checked
         try:
             # Ensure directory exists
             output_debug_dir = os.path.dirname(f"{debug_image_path_prefix}dummy") # get dir from prefix
-            os.makedirs(output_debug_dir, exist_ok=True)
-            debug_image.save(f"{debug_image_path_prefix}diagnostic_redactions.png")
-            logging.info(f"Saved debug image to {debug_image_path_prefix}diagnostic_redactions.png")
-        except Exception as e_save_debug:
-            logging.error(f"Failed to save debug image: {e_save_debug}")
+            # Create directory if it doesn't exist, even if prefix itself is just a filename prefix in current dir
+            if output_debug_dir and not os.path.exists(output_debug_dir):
+                 os.makedirs(output_debug_dir, exist_ok=True)
             
+            debug_image_filename = f"{os.path.basename(debug_image_path_prefix)}.png"
+            # Construct the full path using the original prefix's directory and the new filename
+            full_debug_path = os.path.join(os.path.dirname(debug_image_path_prefix), debug_image_filename)
+            
+            # Ensure the final directory for the image exists before saving
+            actual_save_dir = os.path.dirname(full_debug_path)
+            if actual_save_dir and not os.path.exists(actual_save_dir): # Check actual_save_dir is not empty
+                os.makedirs(actual_save_dir, exist_ok=True)
+
+            debug_pil_image.save(full_debug_path)
+            logging.info(f"Visual debug image saved to: {full_debug_path}")
+        except Exception as e:
+            logging.error(f"Failed to save debug image to {full_debug_path}: {e}", exc_info=True)
+        finally:
+            # Clean up PIL image and draw objects to free memory
+            if 'debug_pil_image' in locals() and debug_pil_image is not None:
+                del debug_pil_image
+            if 'debug_draw' in locals() and debug_draw is not None:
+                del debug_draw
+            gc.collect() # Explicitly collect garbage after debug image processing
+
     return redaction_count # image_array is modified in-place
 
 class ScannedPDFProcessor:
