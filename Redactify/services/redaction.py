@@ -21,7 +21,7 @@ def get_barcode_types():
     """
     return get_supported_barcode_types()
 
-def redact_digital_pdf(pdf_path, pii_types_selected, custom_rules=None, task_context=None, barcode_types_to_redact=None):
+def redact_digital_pdf(pdf_path, pii_types_selected, custom_rules=None, task_context=None, barcode_types_to_redact=None, enable_visual_debug=False):
     """
     Redacts Text PII/QR Codes (blackout) from digital PDF using the modular processor.
     
@@ -31,6 +31,7 @@ def redact_digital_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
         custom_rules: Dictionary of custom rules (keywords, regexes)
         task_context: Celery task context (optional)
         barcode_types_to_redact: List of specific barcode types to redact (None = all types)
+        enable_visual_debug: Whether to enable visual debugging output
         
     Returns:
         Tuple[str, Set[str]]: Path to the redacted PDF file and a set of redacted entity types.
@@ -59,7 +60,8 @@ def redact_digital_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
             custom_rules=custom_rules,
             confidence_threshold=PRESIDIO_CONFIDENCE_THRESHOLD,
             barcode_types_to_redact=barcode_types_to_redact,
-            task_context=task_context
+            task_context=task_context,
+            enable_visual_debug=enable_visual_debug
         )
         
         # Process metadata if requested (after content redaction)
@@ -95,7 +97,7 @@ def redact_digital_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
             )
         raise
 
-def redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules=None, task_context=None, barcode_types_to_redact=None):
+def redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules=None, task_context=None, barcode_types_to_redact=None, enable_visual_debug=False):
     """
     Redacts Text PII/QR Codes from scanned PDF using the modular processor.
     
@@ -105,6 +107,7 @@ def redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
         custom_rules: Dictionary of custom rules (keywords, regexes)
         task_context: Celery task context (optional)
         barcode_types_to_redact: List of specific barcode types to redact (None = all types)
+        enable_visual_debug: Whether to enable visual debugging output
         
     Returns:
         Tuple[str, Set[str]]: Path to the redacted PDF file and a set of redacted entity types.
@@ -136,7 +139,8 @@ def redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
             ocr_confidence_threshold=OCR_CONFIDENCE_THRESHOLD,
             temp_dir=TEMP_DIR,
             barcode_types_to_redact=barcode_types_to_redact,
-            task_context=task_context
+            task_context=task_context,
+            enable_visual_debug=enable_visual_debug
         )
         
         # Process metadata if requested (after content redaction)
@@ -171,19 +175,20 @@ def redact_scanned_pdf(pdf_path, pii_types_selected, custom_rules=None, task_con
             )
         raise
 
-def redact_image(image_path, pii_types_selected, custom_rules=None, task_context=None, barcode_types_to_redact=None):
+def redact_image(image_path, pii_types_selected, custom_rules=None, task_context=None, barcode_types_to_redact=None, enable_visual_debug=False):
     """
-    Redacts Text PII/QR Codes from image files using the modular processor.
-    
+    Redacts PII from an image file using the modular processor.
+
     Args:
-        image_path: Path to the image file
-        pii_types_selected: List of PII types to redact
-        custom_rules: Dictionary of custom rules (keywords, regexes)
-        task_context: Celery task context (optional)
-        barcode_types_to_redact: List of specific barcode types to redact (None = all types)
-        
+        image_path: Path to the image file.
+        pii_types_selected: List of PII types to redact.
+        custom_rules: Dictionary of custom rules (keywords, regexes).
+        task_context: Celery task context (optional).
+        barcode_types_to_redact: List of specific barcode types to redact.
+        enable_visual_debug: Whether to enable visual debugging output.
+
     Returns:
-        Tuple[str, Set[str]]: Path to the redacted image file and a set of redacted entity types.
+        Tuple[str, Set[str]]: Path to the redacted image file and a set of redacted PII types.
     """
     try:
         # Update task status if provided
@@ -208,7 +213,9 @@ def redact_image(image_path, pii_types_selected, custom_rules=None, task_context
             confidence_threshold=PRESIDIO_CONFIDENCE_THRESHOLD,
             ocr_confidence_threshold=OCR_CONFIDENCE_THRESHOLD,
             temp_dir=TEMP_DIR,
-            barcode_types_to_redact=barcode_types_to_redact
+            barcode_types_to_redact=barcode_types_to_redact,
+            task_context=task_context,
+            enable_visual_debug=enable_visual_debug
         )
         
         # Update task status on completion if provided
