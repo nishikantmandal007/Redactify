@@ -4,6 +4,7 @@ import logging
 import imghdr
 import psutil
 import time
+import fitz # Import fitz for PyMuPDF exceptions
 
 # Import the shared Celery instance created in celery_service.py
 from .celery_service import celery
@@ -11,15 +12,15 @@ from .celery_service import celery
 # Import necessary functions from our new modular structure
 from ..processors.pdf_detector import is_scanned_pdf # Changed import
 from .redaction import redact_digital_pdf, redact_scanned_pdf, redact_image
-from ..core.config import UPLOAD_DIR, TEMP_DIR
+from ..core.config import UPLOAD_DIR, TEMP_DIR, TASK_MAX_MEMORY_PERCENT, TASK_HEALTHY_CPU_PERCENT
 from ..recognizers.entity_types import METADATA_ENTITY
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - TASK - %(message)s')
 
-# Define sensible resource limits
-MAX_MEMORY_PERCENT = 85  # Don't let tasks use more than 85% of available memory
-HEALTHY_CPU_PERCENT = 80  # Consider CPU usage high if above 80%
+# Resource limits are now sourced from config
+# MAX_MEMORY_PERCENT = 85  # Don't let tasks use more than 85% of available memory (Now TASK_MAX_MEMORY_PERCENT)
+# HEALTHY_CPU_PERCENT = 80  # Consider CPU usage high if above 80% (Now TASK_HEALTHY_CPU_PERCENT)
 MEMORY_CHECK_INTERVAL = 5  # Check memory usage every 5 seconds
 
 # Define task retry policy
@@ -64,8 +65,9 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules, enable_
     def check_resources():
         """Check if system resources are healthy enough to continue processing"""
         memory = psutil.virtual_memory()
-        if memory.percent > MAX_MEMORY_PERCENT:
-            logging.warning(f"Task {task_id}: Memory usage critical at {memory.percent}%, may need to retry")
+        # Use TASK_MAX_MEMORY_PERCENT from config
+        if memory.percent > TASK_MAX_MEMORY_PERCENT: 
+            logging.warning(f"Task {task_id}: Memory usage critical at {memory.percent}% (limit: {TASK_MAX_MEMORY_PERCENT}%), may need to retry")
             return False
         return True
     
@@ -208,41 +210,83 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules, enable_
             'metadata_stats': metadata_stats  # Include metadata statistics
         }
 
-    except Exception as e:
-        logging.error(f"Task {task_id}: Redaction failed for {filename_for_log}: {e}", exc_info=True)
+    except fitz.PyMuPDFError as fz_error:
+        # Handle PyMuPDF specific errors
+        logging.error(f"Task {task_id}: PyMuPDF processing error for {filename_for_log}: {fz_error.message} (rc={fz_error.rc})", exc_info=True)
         
         # Clean up any temporary files created during processing
         if redacted_file_path and os.path.exists(redacted_file_path):
             try:
                 os.remove(redacted_file_path)
-                logging.info(f"Task {task_id}: Cleaned up partially redacted file: {redacted_file_path}")
+                logging.info(f"Task {task_id}: Cleaned up partially redacted file after PyMuPDFError: {redacted_file_path}")
             except OSError as cleanup_err:
-                logging.warning(f"Task {task_id}: Failed to clean up partial file {redacted_file_path}: {cleanup_err}")
+                logging.error(f"Task {task_id}: Failed to clean up partial file {redacted_file_path} after PyMuPDFError: {cleanup_err}")
+
+        will_retry_pdf = fz_error.rc == fitz.FZ_ERROR_TRYLATER
         
-        # Check if we're going to retry before cleaning up the original file
-        will_retry = isinstance(e, (ConnectionError, TimeoutError)) or 'MemoryError' in str(e)
-        
-        # Only clean up the original file if we're not going to retry
-        if not original_file_deleted and os.path.exists(file_path) and not will_retry:
+        if not original_file_deleted and os.path.exists(file_path) and not will_retry_pdf:
             try:
                 os.remove(file_path)
-                logging.info(f"Task {task_id}: Cleaned up original file after failure: {file_path}")
+                logging.info(f"Task {task_id}: Cleaned up original file after PyMuPDFError: {file_path}")
             except OSError as del_err:
-                logging.warning(f"Task {task_id}: Could not delete original file {file_path} after failure: {del_err}")
+                logging.error(f"Task {task_id}: Could not delete original file {file_path} after PyMuPDFError: {del_err}")
 
-        # Update task state for UI feedback
+        self.update_state(state='FAILURE', meta={
+            'exc_type': type(fz_error).__name__,
+            'exc_message': str(fz_error),
+            'status': f'Redaction process failed due to PyMuPDF error: {fz_error.message}'
+        })
+
+        if will_retry_pdf:
+            logging.info(f"Task {task_id}: PyMuPDF error is FZ_ERROR_TRYLATER, attempting retry.")
+            retry_countdown = RETRY_KWARGS.get('countdown', lambda n: 5 * (2**n))(self.request.retries)
+            return self.retry(exc=fz_error, countdown=retry_countdown)
+        
+        raise self.reraise() if hasattr(self, 'reraise') else fz_error
+
+    # Consider adding specific OCR error handling here if known
+    # except SpecificOCRError as ocr_error:
+    #     logging.error(f"Task {task_id}: OCR processing error for {filename_for_log}: {ocr_error}", exc_info=True)
+    #     # ... similar cleanup and retry logic as above ...
+    #     self.update_state(state='FAILURE', meta={...})
+    #     if should_retry_ocr_error: # based on ocr_error details
+    #         return self.retry(exc=ocr_error, ...)
+    #     raise self.reraise() if hasattr(self, 'reraise') else ocr_error
+
+    except Exception as e: # Generic exception handler
+        logging.error(f"Task {task_id}: Generic redaction failure for {filename_for_log}: {e}", exc_info=True)
+        
+        # Clean up any temporary files created during processing
+        if redacted_file_path and os.path.exists(redacted_file_path):
+            try:
+                os.remove(redacted_file_path)
+                logging.info(f"Task {task_id}: Cleaned up partially redacted file after generic error: {redacted_file_path}")
+            except OSError as cleanup_err:
+                logging.error(f"Task {task_id}: Failed to clean up partial file {redacted_file_path} after generic error: {cleanup_err}")
+        
+        # Default will_retry to False for generic exceptions unless it's a known retryable type
+        will_retry_generic = isinstance(e, (ConnectionError, TimeoutError)) or 'MemoryError' in str(e)
+        
+        # Only clean up the original file if we're not going to retry
+        if not original_file_deleted and os.path.exists(file_path) and not will_retry_generic:
+            try:
+                os.remove(file_path)
+                logging.info(f"Task {task_id}: Cleaned up original file after generic error: {file_path}")
+            except OSError as del_err:
+                logging.error(f"Task {task_id}: Could not delete original file {file_path} after generic error: {del_err}")
+
         self.update_state(state='FAILURE', meta={
             'exc_type': type(e).__name__,
             'exc_message': str(e),
             'status': f'Redaction process failed: {type(e).__name__}'
         })
         
-        # Retry for certain error types
-        if will_retry:
-            return self.retry(exc=e)
-        
-        # Otherwise, re-raise for normal failure handling
-        raise
+        if will_retry_generic:
+            logging.info(f"Task {task_id}: Generic error is retryable ({type(e).__name__}), attempting retry.")
+            retry_countdown = RETRY_KWARGS.get('countdown', lambda n: 5 * (2**n))(self.request.retries)
+            return self.retry(exc=e, countdown=retry_countdown)
+
+        raise self.reraise() if hasattr(self, 'reraise') else e
 
 
 @celery.task
@@ -253,8 +297,9 @@ def cleanup_expired_files():
     try:
         # Check system resources first
         memory = psutil.virtual_memory()
-        if memory.percent > HEALTHY_CPU_PERCENT:
-            logging.warning(f"Skipping scheduled cleanup due to high memory usage: {memory.percent}%")
+        # Use TASK_HEALTHY_CPU_PERCENT from config
+        if memory.percent > TASK_HEALTHY_CPU_PERCENT:
+            logging.warning(f"Skipping scheduled cleanup due to high memory usage: {memory.percent}% (limit: {TASK_HEALTHY_CPU_PERCENT}%)")
             return {'status': 'skipped', 'reason': 'high memory usage'}
         
         # Run cleanup

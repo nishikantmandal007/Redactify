@@ -5,7 +5,7 @@ import os
 import logging
 import numpy as np
 import cv2
-from PIL import Image
+from PIL import Image, ImageDraw # Added ImageDraw for visual debugging
 from pdf2image import convert_from_path
 import fitz  # PyMuPDF
 from .qr_code_processor import detect_and_redact_qr_codes
@@ -25,6 +25,7 @@ import weakref
 from ..recognizers.entity_types import QR_CODE_ENTITY
 from ..utils.gpu_utils import GPUResourceManager
 from ..core.analyzers import AnalyzerFactory
+from ..core.config import TEMP_DIR as GLOBAL_TEMP_DIR # For debug image path fallback
 
 # Add a timeout mechanism to prevent hanging on problematic pages
 class TimeoutError(Exception):
@@ -287,7 +288,7 @@ def prepare_image_for_ocr(img_array):
 def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules=None, 
                        confidence_threshold=0.6, ocr_confidence_threshold=0.8, temp_dir=None,
                        barcode_types_to_redact=None, task_context=None, reduced_quality=False,
-                       enable_visual_debug=False):
+                       enable_visual_debug=False): # Added enable_visual_debug
     """
     Process a scanned (image-based) PDF file and redact PII.
     Optimized with batched processing, parallel execution, and GPU acceleration.
@@ -304,7 +305,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
         barcode_types_to_redact: List of barcode types to redact
         task_context: Optional Celery task context for progress updates
         reduced_quality: Use reduced quality settings (for low memory situations)
-        enable_visual_debug: Whether to enable visual debugging output
+        enable_visual_debug: If True, save diagnostic images.
         
     Returns:
         Tuple[str, Set[str]]: Path to the redacted PDF file and a set of redacted entity types.
@@ -320,17 +321,23 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
             logging.error("OCR engine not initialized")
             raise ValueError("OCR engine not available")
         
-    # Set up temp directory if not provided
+    # Set up temp directory for main output if not provided
+    # This 'temp_dir' is for the final redacted PDF and potentially debug images if enabled.
+    # pdf2image uses its own 'ocr_temp_dir' internally.
     if not temp_dir:
-        temp_dir = os.path.join(os.path.dirname(os.path.dirname(pdf_path)), "temp_files")
+        # Use the global TEMP_DIR from config as a base for a subdirectory
+        # to avoid cluttering the main app temp_dir directly with many files.
+        # Create a unique sub-folder for this specific PDF processing run.
+        base_output_dir = os.path.join(GLOBAL_TEMP_DIR, "scanned_outputs")
+        # Generate a more unique temp_dir for this specific PDF if possible
+        pdf_basename = os.path.splitext(os.path.basename(pdf_path))[0]
+        run_specific_temp_dir = os.path.join(base_output_dir, f"{pdf_basename}_{int(time.time())}")
+        os.makedirs(run_specific_temp_dir, exist_ok=True)
+        temp_dir = run_specific_temp_dir
+    else:
+        # Ensure the provided temp_dir exists
         os.makedirs(temp_dir, exist_ok=True)
-    
-    # Set up debug directory if visual debugging is enabled
-    debug_dir = None
-    if enable_visual_debug:
-        debug_dir = os.path.join(temp_dir, "debug_images")
-        os.makedirs(debug_dir, exist_ok=True)
-        logging.info(f"Visual debugging enabled. Debug images will be saved to: {debug_dir}")
+
     
     # Constants for optimization - adjusted based on reduced_quality flag and GPU availability
     # Use more workers when GPU is available and not in reduced_quality mode
@@ -340,8 +347,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
     
     # Log acceleration status
     gpu_status = "GPU acceleration enabled" if GPUResourceManager.is_gpu_available() else "CPU mode"
-    debug_status = " with visual debugging" if enable_visual_debug else ""
-    logging.info(f"Processing scanned PDF: {pdf_path} ({gpu_status}{debug_status})")
+    logging.info(f"Processing scanned PDF: {pdf_path} ({gpu_status})")
     
     # Check if QR code redaction is requested
     redact_qr_codes = "QR_CODE" in pii_types_selected
@@ -372,8 +378,8 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                 }
             )
             
-        # Use a context manager for the temp directory
-        with tempfile.TemporaryDirectory(prefix="redactify_ocr_") as ocr_temp_dir:
+        # Use a context manager for the temp directory for images from pdf2image
+        with tempfile.TemporaryDirectory(prefix="redactify_pdf2image_") as pdf2image_temp_output_folder:
             # Set DPI based on quality settings and available memory
             dpi = 150 if reduced_quality else 200
             
@@ -403,7 +409,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                 pdf_images = convert_from_path(
                     pdf_path,
                     dpi=dpi,
-                    output_folder=ocr_temp_dir,
+                    output_folder=pdf2image_temp_output_folder, # Use temp dir for pdf2image outputs
                     fmt="png",
                     thread_count=1,  # Lower for stability
                     use_pdftocairo=True,
@@ -417,7 +423,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                     pdf_images = convert_from_path(
                         pdf_path,
                         dpi=dpi,
-                        output_folder=ocr_temp_dir,
+                        output_folder=pdf2image_temp_output_folder,
                         fmt="png",
                         thread_count=1,
                         use_pdftocairo=True,
@@ -462,8 +468,8 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                             aggressive_cleanup()
                             
                         # Get image and optimize it
-                        img = pdf_images[page_idx]
-                        img_array = np.array(img)
+                        img_pil = pdf_images[page_idx] # This is a PIL Image object
+                        img_array = np.array(img_pil)
                         
                         # Optimize image to reduce memory footprint - use GPU if available
                         max_dim = 2000 if reduced_quality else 3000
@@ -485,18 +491,17 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                                     batch_redacted_types.add(QR_CODE_ENTITY) # Add QR code type if redacted
                             except Exception as barcode_err:
                                 logging.warning(f"Barcode detection failed on page {page_idx}: {barcode_err}")
-                                # Continue without barcode redaction for this page
 
-                        # Convert back to PIL Image for further processing if needed
-                        # Ensure img_array is the potentially redacted one
-                        img = Image.fromarray(img_array)
+                        # Ensure img_array is what we continue with (might have been updated by QR redaction)
+                        # Convert back to PIL Image for further processing if needed by OCR prep
+                        img_pil_for_ocr_prep = Image.fromarray(img_array)
                         
                         # Prepare image for OCR to improve stability - use GPU if available
                         try:
-                            ocr_img_array = prepare_image_for_ocr(img_array)
+                            ocr_img_array = prepare_image_for_ocr(np.array(img_pil_for_ocr_prep))
                         except Exception as prep_err:
                             logging.error(f"Error preparing image for OCR on page {page_idx}: {prep_err}")
-                            ocr_img_array = img_array  # Use original if preparation fails
+                            ocr_img_array = np.array(img_pil_for_ocr_prep)  # Use original if preparation fails
                         
                         # Run OCR on the image with process isolation and timeout
                         ocr_result = None
@@ -510,25 +515,25 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                         if ocr_error:
                             logging.warning(f"OCR failed on page {page_idx}: {ocr_error}")
                             logging.info(f"Proceeding without text recognition for page {page_idx}")
-                            # Just save the page without OCR processing
-                            page_result_path = os.path.join(ocr_temp_dir, f"processed_page_{page_idx}.png")
-                            img.save(page_result_path)
+                            # Save the (potentially QR-redacted) image directly
+                            # Use a temporary path within the main 'temp_dir' for this specific run.
+                            page_result_path = os.path.join(temp_dir, f"processed_page_{page_idx}.png")
+                            Image.fromarray(img_array).save(page_result_path) # img_array is the one after QR redaction
                             batch_results.append((page_idx, page_result_path))
                             
-                            # Clean up
                             del img_array
                             del ocr_img_array
                             gc.collect()
                             continue
                         
-                        # Extract text, word boxes, and create a mapping from text to boxes
-                        page_text, word_boxes, char_to_box_map, ocr_word_segments = extract_ocr_results(ocr_result, ocr_confidence_threshold)
+                        # Extract text, ocr_word_segments, and char_to_box_map (approximated)
+                        page_text, ocr_word_segments, char_to_box_map = extract_ocr_results(ocr_result, ocr_confidence_threshold)
                         
                         # Only analyze if we have text content
                         if page_text.strip():
                             # Analyze text for PII using Presidio
                             try:
-                                analyzer_results = analyzer.analyze(
+                                analyzer_results_presidio = analyzer.analyze(
                                     text=page_text,
                                     entities=pii_types_selected,
                                     language='en'
@@ -536,58 +541,58 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                                 
                                 # Filter by confidence threshold
                                 entities_to_redact_conf = [
-                                    e for e in analyzer_results 
+                                    e for e in analyzer_results_presidio
                                     if e.score >= confidence_threshold
                                 ]
                                 
                                 # Apply custom filters if specified
-                                if custom_rules:
-                                    entities_to_redact = apply_custom_filters(page_text, entities_to_redact_conf, custom_rules)
-                                else:
-                                    entities_to_redact = entities_to_redact_conf
+                                presidio_entities_for_redaction = apply_custom_filters(page_text, entities_to_redact_conf, custom_rules) if custom_rules else entities_to_redact_conf
                                     
-                                # Redact the image with improved accuracy
-                                if entities_to_redact:
-                                    # Create debug output path if debugging is enabled
-                                    page_debug_path = None
-                                    if enable_visual_debug and debug_dir:
-                                        page_debug_path = os.path.join(debug_dir, f"debug_page_{page_idx}.png")
+                                # Prepare list of (Presidio_entity, pii_text_string) for redaction function
+                                entities_with_pii_text = []
+                                for entity_obj in presidio_entities_for_redaction:
+                                    pii_text_string = page_text[entity_obj.start:entity_obj.end]
+                                    entities_with_pii_text.append({'entity': entity_obj, 'pii_text': pii_text_string})
+
+                                # Redact the image using the new approach
+                                if entities_with_pii_text:
+                                    debug_prefix_for_page = None
+                                    if enable_visual_debug:
+                                        debug_prefix_for_page = os.path.join(temp_dir, f"debug_page_{page_idx}_")
                                     
+                                    # Call the updated redact_entities_on_image
+                                    # img_array is modified in place
                                     redact_count = redact_entities_on_image(
-                                        entities_to_redact, 
-                                        char_to_box_map, 
-                                        img_array,
-                                        ocr_word_segments=ocr_word_segments,
-                                        enable_visual_debug=enable_visual_debug,
-                                        debug_output_path=page_debug_path
+                                        entities_with_pii_text, # List of {'entity': Entity, 'pii_text': str}
+                                        ocr_word_segments,      # List of {'text': str, 'box': ..., 'start_char_offset': int, ...}
+                                        img_array,              # Numpy array of the image
+                                        char_to_box_map=char_to_box_map, # For debug comparison
+                                        debug_image_path_prefix=debug_prefix_for_page
                                     )
-                                    
                                     if redact_count > 0:
                                         batch_redactions += redact_count
-                                        # Add the specific types that were redacted
-                                        for entity in entities_to_redact:
-                                            batch_redacted_types.add(entity.entity_type)
-                                    
-                                    img = Image.fromarray(img_array)  # Update image with redactions
+                                        for item in entities_with_pii_text:
+                                            if item['entity'].score >= confidence_threshold : # Ensure only redacted items are added
+                                                batch_redacted_types.add(item['entity'].entity_type)
+                                    # img_array is now modified with redactions
                             except Exception as analyze_err:
                                 logging.error(f"Error analyzing text on page {page_idx}: {analyze_err}")
                         
-                        # Save processed page
-                        page_result_path = os.path.join(ocr_temp_dir, f"processed_page_{page_idx}.png")
-                        img.save(page_result_path)
+                        # Save processed page (img_array now contains QR and text redactions)
+                        page_result_path = os.path.join(temp_dir, f"processed_page_{page_idx}.png")
+                        Image.fromarray(img_array).save(page_result_path)
                         
                         # Add to results
                         batch_results.append((page_idx, page_result_path))
                         
                         # Explicitly clean up to reduce memory pressure
-                        del img
-                        del img_array
-                        del ocr_img_array
+                        del img_pil # From pdf2image
+                        del img_array # Main working array
+                        del ocr_img_array # Array sent to OCR
                         del ocr_result
                         del page_text
-                        del word_boxes
+                        del ocr_word_segments # Changed from word_boxes
                         del char_to_box_map
-                        del ocr_word_segments
                         gc.collect()
                         
                     except Exception as e:
@@ -646,7 +651,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
                         logging.error(f"Error processing batch: {e}", exc_info=True)
             
             # Free up memory before PDF creation
-            pdf_images = None
+            pdf_images = None # pdf_images from pdf2image should be cleaned up by exiting its temp dir context
             gc.collect()
             
             # Sort processed pages by index
@@ -666,27 +671,35 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
             # Make sure we have at least one processed page to avoid empty PDF error
             if len(all_processed_pages) == 0:
                 logging.error("No pages were successfully processed")
-                raise ValueError("No pages were successfully processed")
+                # Attempt to save an empty PDF or handle as error
+                # For now, let it proceed, fitz might handle empty doc save gracefully or error out
+                # which will be caught by the main try-except block.
             
             # Process pages in smaller batches when adding to PDF to reduce memory usage
             pdf_batch_size = 5
-            for batch_start in range(0, len(all_processed_pages), pdf_batch_size):
-                batch_end = min(batch_start + pdf_batch_size, len(all_processed_pages))
-                batch = all_processed_pages[batch_start:batch_end]
+            for batch_start_idx in range(0, len(all_processed_pages), pdf_batch_size):
+                batch_page_paths = all_processed_pages[batch_start_idx:batch_start_idx + pdf_batch_size]
                 
-                for _, page_path in batch:
+                for _, page_path in batch_page_paths:
                     try:
                         # Open the processed image file
-                        img = fitz.open(page_path)
+                        img_doc = fitz.open(page_path) # page_path is a path to an image file
                         # Get image dimensions
-                        rect = img[0].rect
+                        rect = img_doc[0].rect
                         # Create a new page in the output PDF with the image dimensions
                         pdf_page = pdf_writer.new_page(width=rect.width, height=rect.height)
                         # Insert the image onto the new page
                         pdf_page.insert_image(rect, filename=page_path)
-                        img.close()
+                        img_doc.close()
                         # Force immediate cleanup of page resources
-                        del img
+                        del img_doc
+                        # Optionally delete the temporary image file now if not needed for debugging
+                        if not enable_visual_debug: # Don't delete if we might need it for other debug purposes
+                            try:
+                                os.remove(page_path)
+                            except OSError:
+                                logging.warning(f"Could not remove temp processed image: {page_path}")
+
                         gc.collect()
                     except Exception as e:
                         logging.error(f"Error adding page to PDF: {e}", exc_info=True)
@@ -723,7 +736,7 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
         logging.error(f"Error in scanned PDF redaction: {e}", exc_info=True)
         
         # Clean up
-        if 'pdf_writer' in locals():
+        if 'pdf_writer' in locals() and pdf_writer.is_open:
             try:
                 pdf_writer.close()
             except:
@@ -736,94 +749,78 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
 
 def extract_ocr_results(ocr_result, confidence_threshold):
     """
-    Extract text, word boxes, word segments, and character-to-box mapping from PaddleOCR results.
+    Extract text, word boxes, and character-to-box mapping from PaddleOCR results.
+    Note: Character boxes are approximated by dividing word/line boxes.
     
     Args:
         ocr_result: Output from PaddleOCR
         confidence_threshold: Minimum confidence score for OCR results
         
     Returns:
-        Tuple of (text, word_boxes, char_to_box_map, ocr_word_segments)
+        Tuple of (page_text, ocr_word_segments, char_to_box_map)
+        - page_text: String of all recognized text, joined by spaces.
+        - ocr_word_segments: List of dicts, each {'text': str, 'box': List[List[float]], 
+                                                 'start_char_offset': int, 'end_char_offset': int}.
+        - char_to_box_map: Dict mapping (char_start, char_end) in page_text to approximated char box.
     """
-    page_text = ""
-    word_boxes = []
-    char_to_box_map = {}
-    ocr_word_segments = []  # New: Store OCR word segments for precise redaction
-    
-    try:
-        if not ocr_result or not ocr_result[0]:
-            return page_text, word_boxes, char_to_box_map, ocr_word_segments
+    page_text_parts = []
+    ocr_word_segments = []
+    char_to_box_map = {} # Approximated char boxes (for debug drawing or fallback)
+    current_char_offset = 0 # Tracks character offset in the page_text
+
+    if not ocr_result or not ocr_result[0]: # ocr_result can be [None] if page is blank
+        return "", [], {}
+
+    for line_data in ocr_result[0]: # PaddleOCR often returns list of lines
+        if not line_data or len(line_data) < 2:
+            continue
             
-        current_pos = 0
+        text_box_coords = line_data[0]  # Coordinates of the text box for the line/segment
+        text_content = line_data[1][0]   # Text string for the line/segment
+        text_confidence = float(line_data[1][1])  # Confidence score
+
+        if text_confidence < confidence_threshold or not text_content.strip():
+            continue
+
+        page_text_parts.append(text_content) # Collect parts to join later for page_text
         
-        # Process each text box
-        for line_result in ocr_result[0]:
-            if len(line_result) < 2:
-                continue
-                
-            text_box = line_result[0]  # Coordinates of box
-            text = line_result[1][0]   # Text content
-            conf = float(line_result[1][1])  # Confidence score
+        segment_start_char_offset = current_char_offset
+        segment_end_char_offset = current_char_offset + len(text_content)
+        
+        ocr_word_segments.append({
+            'text': text_content,
+            'box': text_box_coords, # This is the box for the whole text_content segment
+            'start_char_offset': segment_start_char_offset,
+            'end_char_offset': segment_end_char_offset 
+        })
+
+        # Generate approximated character boxes for char_to_box_map (for debugging/fallback)
+        # This uses the bounding box of the current text_content segment
+        box_width = text_box_coords[1][0] - text_box_coords[0][0] # Top-right x - Top-left x
+        char_avg_width = box_width / max(len(text_content), 1)
+        
+        for i, char_val in enumerate(text_content):
+            char_page_start_offset = current_char_offset + i
             
-            # Skip low-confidence results
-            if conf < confidence_threshold:
-                continue
-                
-            if text and text.strip():
-                # Add to full page text
-                page_text += text + " "
-                
-                # Store word box
-                word_boxes.append((text, text_box))
-                
-                # NEW: Store word segment data for precise redaction
-                # Convert text_box coordinates to a more usable format
-                x_coords = [point[0] for point in text_box]
-                y_coords = [point[1] for point in text_box]
-                word_segment = {
-                    'text': text,
-                    'bbox': {
-                        'x0': min(x_coords),
-                        'y0': min(y_coords), 
-                        'x1': max(x_coords),
-                        'y1': max(y_coords)
-                    },
-                    'confidence': conf,
-                    'text_start': current_pos,
-                    'text_end': current_pos + len(text)
-                }
-                ocr_word_segments.append(word_segment)
-                
-                # Create character mapping - approximate character locations
-                # by distributing them evenly across the box
-                text_width = text_box[1][0] - text_box[0][0]  # Box width
-                char_width = text_width / max(len(text), 1)  # Width per character
-                
-                for i, char in enumerate(text):
-                    char_start = current_pos + i
-                    char_end = char_start + 1
-                    
-                    # Calculate character position (approx)
-                    char_left = text_box[0][0] + i * char_width
-                    char_right = char_left + char_width
-                    
-                    # Use same vertical coordinates as the word box
-                    char_top = text_box[0][1]
-                    char_bottom = text_box[2][1]
-                    
-                    char_box = [[char_left, char_top], [char_right, char_top], 
-                                [char_right, char_bottom], [char_left, char_bottom]]
-                    
-                    # Map this character position to its box coordinates
-                    char_to_box_map[(char_start, char_end)] = char_box
-                
-                # Update current position in the text
-                current_pos += len(text) + 1  # +1 for the space
-                
-    except Exception as e:
-        logging.error(f"Error parsing OCR results: {e}", exc_info=True)
+            char_left_x = text_box_coords[0][0] + i * char_avg_width
+            char_right_x = char_left_x + char_avg_width
+            char_top_y = text_box_coords[0][1]    # Top y of the segment's box
+            char_bottom_y = text_box_coords[2][1] # Bottom y of the segment's box
+            
+            char_specific_box = [
+                [char_left_x, char_top_y], [char_right_x, char_top_y],
+                [char_right_x, char_bottom_y], [char_left_x, char_bottom_y]
+            ]
+            char_to_box_map[(char_page_start_offset, char_page_start_offset + 1)] = char_specific_box
         
-    return page_text, word_boxes, char_to_box_map, ocr_word_segments
+        current_char_offset = segment_end_char_offset + 1 # +1 for the space that will join this and next segment
+
+    page_text = " ".join(page_text_parts)
+    # Adjust end_char_offset for the last segment if page_text had a trailing space removed by join.
+    # However, Presidio works on the joined 'page_text', so offsets should be relative to that.
+    # The current_char_offset logic correctly maps to this joined page_text.
+
+    return page_text, ocr_word_segments, char_to_box_map
 
 def apply_custom_filters(text, entities_to_redact_conf, custom_rules):
     """
@@ -870,18 +867,17 @@ def apply_custom_filters(text, entities_to_redact_conf, custom_rules):
         
     return filtered_entities
 
-def redact_entities_on_image(entities, char_to_box_map, image_array, ocr_word_segments=None, enable_visual_debug=False, debug_output_path=None):
+def redact_entities_on_image(entities, char_to_box_map, image_array, debug_image_path_prefix=None): # Added debug_image_path_prefix
     """
     Draw text labels on the image to redact detected PII.
-    Uses word segments for more accurate redaction when available.
+    Uses the centralized text label processor for consistent label generation.
+    Optionally saves a debug image showing character boxes and redaction areas.
     
     Args:
         entities: List of entity results from analyzer
         char_to_box_map: Mapping from character positions to box coordinates
-        image_array: Numpy array containing the image
-        ocr_word_segments: Optional list of OCR word segments for precise redaction
-        enable_visual_debug: Whether to create debugging visualizations
-        debug_output_path: Path for debug output (if debugging enabled)
+        image_array: Numpy array containing the image (modified in place)
+        debug_image_path_prefix: If provided, save a diagnostic image with this prefix.
         
     Returns:
         int: Number of entities redacted
@@ -889,158 +885,136 @@ def redact_entities_on_image(entities, char_to_box_map, image_array, ocr_word_se
     from .text_label_processor import generate_label_text, get_entity_counters, draw_text_label_on_image
     
     redaction_count = 0
-    redacted_rects_on_page = set()
-    final_redaction_boxes = []  # Track for debugging
+    # For entity_types, we need the Presidio entity objects from entities_with_pii_text
+    entity_types_on_page = {item['entity'].entity_type for item in entities_with_pii_text}
+    entity_counters = get_entity_counters(entity_types_on_page)
     
-    # Get entity counters for all possible entity types in entities
-    entity_types = {entity.entity_type for entity in entities}
-    entity_counters = get_entity_counters(entity_types)
-    
-    # Try GPU-accelerated drawing if available
-    use_gpu = GPUResourceManager.is_gpu_available()
-    
-    for entity in entities:
+    debug_pil_image = None
+    debug_draw = None
+
+    if debug_image_path_prefix and image_array is not None:
         try:
-            entity_type = entity.entity_type
-            entity_boxes = []
+            if image_array.ndim == 2: debug_pil_image = Image.fromarray(image_array, 'L').convert('RGBA')
+            elif image_array.shape[2] == 3: debug_pil_image = Image.fromarray(image_array, 'RGB').convert('RGBA')
+            elif image_array.shape[2] == 4: debug_pil_image = Image.fromarray(image_array, 'RGBA')
+            else: raise ValueError(f"Unsupported image array shape: {image_array.shape}")
+            debug_draw = ImageDraw.Draw(debug_pil_image, "RGBA")
+
+            # Draw approximated character boxes (BLUE) from char_to_box_map if available
+            if char_to_box_map and debug_draw:
+                for char_box_coords_list in char_to_box_map.values():
+                    if len(char_box_coords_list) == 4:
+                        rect_coords = [char_box_coords_list[0][0], char_box_coords_list[0][1],
+                                       char_box_coords_list[2][0], char_box_coords_list[2][1]]
+                        debug_draw.rectangle(rect_coords, outline=(0, 0, 255, 100), width=1) # Light Blue
             
-            # Use word segments for more accurate redaction if available
-            if ocr_word_segments:
-                overlapping_segments = find_word_segments_for_entity(entity, ocr_word_segments, "")
-                
-                for segment in overlapping_segments:
-                    bbox = segment['bbox']
-                    box_rect = (bbox['x0'], bbox['y0'], bbox['x1'], bbox['y1'])
-                    
-                    # Convert to tuple for deduplication
-                    if box_rect not in redacted_rects_on_page:
-                        entity_boxes.append([
-                            [bbox['x0'], bbox['y0']], 
-                            [bbox['x1'], bbox['y0']],
-                            [bbox['x1'], bbox['y1']], 
-                            [bbox['x0'], bbox['y1']]
-                        ])
-                        redacted_rects_on_page.add(box_rect)
-                        
-                logging.debug(f"Using word-segment-based redaction for entity '{entity_type}' with {len(entity_boxes)} segments")
-            
-            # Fall back to character-based method if no word segments or no overlap found
-            if not entity_boxes:
-                logging.debug(f"Falling back to character-based redaction for entity '{entity_type}'")
-                
-                # Find all character boxes that overlap with this entity
-                for char_pos, box in char_to_box_map.items():
-                    char_start, char_end = char_pos
-                    
-                    # Check for overlap with entity
-                    if (entity.start <= char_start < entity.end or 
-                        entity.start < char_end <= entity.end or
-                        (char_start <= entity.start and char_end >= entity.end)):
-                        
-                        # Convert box to tuple for deduplication
-                        box_points = tuple(tuple(point) for point in box)
-                        if box_points not in redacted_rects_on_page:
-                            entity_boxes.append(box)
-                            redacted_rects_on_page.add(box_points)
-            
-            if not entity_boxes:
-                logging.warning(f"No redaction boxes found for entity '{entity_type}' at position {entity.start}-{entity.end}")
-                continue
-                
-            # Combine all boxes into a single bounding rectangle
-            all_points = np.array([point for box in entity_boxes for point in box])
-            if len(all_points) == 0:
-                continue
-                
-            min_x = int(np.min(all_points[:, 0]))
-            min_y = int(np.min(all_points[:, 1]))
-            max_x = int(np.max(all_points[:, 0]))
-            max_y = int(np.max(all_points[:, 1]))
-            
-            # Add a small margin around the redaction box
-            margin = 2
-            min_x = max(0, min_x - margin)
-            min_y = max(0, min_y - margin)
-            max_x = min(image_array.shape[1] - 1, max_x + margin)
-            max_y = min(image_array.shape[0] - 1, max_y + margin)
-            
-            # Track redaction box for debugging
-            final_redaction_boxes.append((min_x, min_y, max_x, max_y))
-            
-            # Generate label text using the centralized function
-            label_text = generate_label_text(entity_type, entity_counters[entity_type])
-            
-            # Increment counter for next occurrence of this entity type
-            entity_counters[entity_type] += 1
-            
-            # Draw the text label on the image with an appropriate font size
-            # Use a font size proportional to the redaction box height
-            font_size = max(10, int(min((max_y - min_y) * 0.75, 24)))
-            
-            # Use GPU-accelerated drawing if available
-            if use_gpu and GPUResourceManager.get_gpu_enabled_opencv() is not None:
-                try:
-                    cuda = GPUResourceManager.get_gpu_enabled_opencv()
-                    # Upload to GPU
-                    gpu_img = cv2.cuda_GpuMat()
-                    gpu_img.upload(image_array)
-                    
-                    # Download for text drawing (not available on GPU)
-                    cpu_img = gpu_img.download()
-                    
-                    # Draw redaction box
-                    cv2.rectangle(cpu_img, (int(min_x), int(min_y)), (int(max_x), int(max_y)), 
-                                 (50, 50, 50), -1)
-                    
-                    # Draw text
-                    cv2.putText(cpu_img, label_text, (int(min_x)+5, int(min_y)+20), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-                    
-                    # Upload back to GPU
-                    gpu_img.upload(cpu_img)
-                    
-                    # Download final result
-                    image_array = gpu_img.download()
-                    redaction_count += 1
-                except Exception as e:
-                    logging.warning(f"GPU-accelerated drawing failed, falling back to CPU: {e}")
-                    # Fall back to standard drawing
-                    image_array = draw_text_label_on_image(
-                        image_array,
-                        (min_x, min_y, max_x, max_y),
-                        label_text,
-                        font_size=font_size
-                    )
-                    redaction_count += 1
-            else:
-                # Use standard drawing function
-                image_array = draw_text_label_on_image(
-                    image_array,
-                    (min_x, min_y, max_x, max_y),
-                    label_text,
-                    font_size=font_size
-                )
-                redaction_count += 1
-            
+            # Draw all OCR word/segment boxes (GREEN)
+            if ocr_word_segments and debug_draw:
+                for segment in ocr_word_segments:
+                    box = segment['box'] # [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]
+                    # Convert to [x1,y1,x2,y2] for ImageDraw.rectangle
+                    rect_coords = [box[0][0], box[0][1], box[2][0], box[2][1]] 
+                    debug_draw.rectangle(rect_coords, outline=(0, 255, 0, 100), width=1) # Light Green
         except Exception as e:
-            logging.debug(f"Error redacting entity: {e}")
+            logging.warning(f"Visual debug setup (char/segment boxes) failed: {e}")
+            debug_pil_image = debug_draw = None # Disable further debug drawing if setup fails
+
+    # Store boxes that have actually been used for redaction to avoid double redaction on shared segments
+    # This set will store indices of ocr_word_segments that have been used.
+    used_ocr_segment_indices = set()
+
+    for item in entities_with_pii_text:
+        entity = item['entity']
+        pii_text_from_presidio = item['pii_text'] # This is the ground truth PII string
+
+        # Find corresponding segments in ocr_word_segments
+        # Entity.start and entity.end are character offsets in the full page_text
+        # ocr_word_segments also have start_char_offset and end_char_offset
+
+        relevant_segments_boxes = []
+        current_segment_indices_for_this_entity = [] # Track indices for this entity only
+
+        for idx, segment in enumerate(ocr_word_segments):
+            # Check for overlap:
+            # A segment is relevant if its character range [seg_start, seg_end)
+            # overlaps with the entity's character range [ent_start, ent_end)
+            seg_start = segment['start_char_offset']
+            seg_end = segment['end_char_offset']
+            ent_start = entity.start
+            ent_end = entity.end
+
+            # Max of starts < Min of ends indicates overlap
+            if max(seg_start, ent_start) < min(seg_end, ent_end):
+                if idx not in used_ocr_segment_indices: # Process segment only if not already used by a previous entity
+                    relevant_segments_boxes.append(segment['box'])
+                    current_segment_indices_for_this_entity.append(idx)
+
+        if not relevant_segments_boxes:
+            # Fallback or log if no segments found for this entity (should be rare if page_text is consistent)
+            logging.debug(f"No new/available OCR segments found for PII: '{pii_text_from_presidio}' (type: {entity.entity_type}) at [{entity.start}-{entity.end}]")
             continue
-    
-    # Create visual debug image if requested
-    if enable_visual_debug and debug_output_path and ocr_word_segments:
+
+        # Mark these segments as used for future PII entities in this image
+        for idx_to_mark in current_segment_indices_for_this_entity:
+            used_ocr_segment_indices.add(idx_to_mark)
+
+        # Combine all relevant segment boxes into a single bounding rectangle
+        all_points = np.array([point for box in relevant_segments_boxes for point in box])
+        if len(all_points) == 0: # Should not happen if relevant_segments_boxes is not empty
+            continue
+
+        min_x = int(np.min(all_points[:, 0]))
+        min_y = int(np.min(all_points[:, 1]))
+        max_x = int(np.max(all_points[:, 0]))
+        max_y = int(np.max(all_points[:, 1]))
+
+        # Add a small margin around the redaction box
+        margin = 2
+        min_x = max(0, min_x - margin)
+        min_y = max(0, min_y - margin)
+        max_x = min(image_array.shape[1] - 1, max_x + margin) # image_array.shape[1] is width
+        max_y = min(image_array.shape[0] - 1, max_y + margin) # image_array.shape[0] is height
+
+        # Generate label text
+        entity_type = entity.entity_type
+        label_text = generate_label_text(entity_type, entity_counters[entity_type])
+        entity_counters[entity_type] += 1
+
+        # Draw the text label on the original image_array
+        # Adaptive font size calculation
+        font_size = max(10, int(min((max_y - min_y) * 0.75, (max_x-min_x)*0.2 if (max_x-min_x) > 0 else 24, 24)))
+        
+        # image_array is modified in-place by draw_text_label_on_image
+        draw_text_label_on_image( 
+            image_array,
+            (min_x, min_y, max_x, max_y), # This is the new, more accurate bounding box
+            label_text,
+            font_size=font_size
+        )
+        redaction_count += 1
+
+        # If debugging, draw this new redaction box on the debug_image
+        if debug_image_path_prefix and draw: # Ensure 'draw' object is valid
+            try:
+                draw.rectangle([(min_x, min_y), (max_x, max_y)], fill=(255, 0, 0, 128), outline="red", width=2)
+                # Attempt to draw text; choose a basic font if specific one not loaded
+                # This text drawing on debug image is optional and can be simple
+                draw.text((min_x + 5, min_y + 5), label_text, fill=(255,255,255,255)) # White text
+            except Exception as e_debug_text:
+                logging.debug(f"Could not draw text on debug image: {e_debug_text}")
+
+    # --- Visual Debugging: Save image (moved outside the loop) ---
+    if debug_image_path_prefix and debug_image and draw: # Ensure draw is also checked
         try:
-            create_visual_debug_image(
-                image_array, 
-                ocr_word_segments, 
-                char_to_box_map, 
-                entities, 
-                final_redaction_boxes, 
-                debug_output_path
-            )
-        except Exception as debug_err:
-            logging.warning(f"Failed to create visual debug image: {debug_err}")
-    
-    return redaction_count
+            # Ensure directory exists
+            output_debug_dir = os.path.dirname(f"{debug_image_path_prefix}dummy") # get dir from prefix
+            os.makedirs(output_debug_dir, exist_ok=True)
+            debug_image.save(f"{debug_image_path_prefix}diagnostic_redactions.png")
+            logging.info(f"Saved debug image to {debug_image_path_prefix}diagnostic_redactions.png")
+        except Exception as e_save_debug:
+            logging.error(f"Failed to save debug image: {e_save_debug}")
+            
+    return redaction_count # image_array is modified in-place
 
 class ScannedPDFProcessor:
     """Class for processing scanned PDFs with GPU acceleration."""
@@ -1062,7 +1036,8 @@ class ScannedPDFProcessor:
     
     def process(self, pdf_path, pii_types, custom_rules=None, 
                 confidence_threshold=0.6, temp_dir=None, 
-                barcode_types=None, reduced_quality=False, task_context=None):
+                barcode_types=None, reduced_quality=False, task_context=None,
+                enable_visual_debug=False): # Added enable_visual_debug
         """
         Process a scanned PDF file to detect and redact PII.
         Uses centralized GPU resource management for consistent performance.
@@ -1076,6 +1051,7 @@ class ScannedPDFProcessor:
             barcode_types: List of barcode types to redact
             reduced_quality: Use reduced quality settings (for low memory)
             task_context: Optional Celery task context for progress updates
+            enable_visual_debug: If True, save diagnostic images.
             
         Returns:
             Tuple[str, Set[str]]: Path to redacted PDF and redacted entity types
@@ -1097,10 +1073,11 @@ class ScannedPDFProcessor:
                 pii_types_selected=pii_types,
                 custom_rules=custom_rules,
                 confidence_threshold=confidence_threshold,
-                temp_dir=temp_dir,
+                temp_dir=temp_dir, # This is the main output and debug image directory
                 barcode_types_to_redact=barcode_types,
                 reduced_quality=reduced_quality,
-                task_context=task_context
+                task_context=task_context,
+                enable_visual_debug=enable_visual_debug # Pass debug flag
             )
             
             # Cleanup GPU resources after processing
@@ -1116,102 +1093,3 @@ class ScannedPDFProcessor:
             
             # Re-raise the exception
             raise
-
-def create_visual_debug_image(image_array, ocr_word_segments, char_to_box_map, entities, 
-                             final_redaction_boxes, debug_output_path):
-    """
-    Create a visual debugging image showing OCR boxes, character boxes, and redaction boxes.
-    
-    Args:
-        image_array: Original image as numpy array
-        ocr_word_segments: List of OCR word segment dictionaries 
-        char_to_box_map: Character position to bounding box mapping
-        entities: List of detected PII entities
-        final_redaction_boxes: List of final redaction box coordinates
-        debug_output_path: Path to save the debug image
-        
-    Returns:
-        str: Path to the saved debug image
-    """
-    try:
-        # Create a copy of the image for debugging
-        debug_img = image_array.copy()
-        
-        # Draw OCR word boxes in GREEN
-        for segment in ocr_word_segments:
-            bbox = segment['bbox']
-            x0, y0, x1, y1 = int(bbox['x0']), int(bbox['y0']), int(bbox['x1']), int(bbox['y1'])
-            cv2.rectangle(debug_img, (x0, y0), (x1, y1), (0, 255, 0), 2)  # Green boxes
-            
-            # Add text label for OCR confidence
-            conf_text = f"{segment['confidence']:.2f}"
-            cv2.putText(debug_img, conf_text, (x0, y0-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-        
-        # Draw character-level approximation boxes in BLUE (sample only to avoid clutter)
-        char_box_sample = list(char_to_box_map.items())[::10]  # Every 10th character
-        for (start, end), char_box in char_box_sample:
-            if len(char_box) >= 4:
-                points = np.array([[int(p[0]), int(p[1])] for p in char_box], dtype=np.int32)
-                cv2.polylines(debug_img, [points], True, (255, 0, 0), 1)  # Blue boxes
-        
-        # Draw final redaction boxes in RED (filled)
-        for (x0, y0, x1, y1) in final_redaction_boxes:
-            cv2.rectangle(debug_img, (int(x0), int(y0)), (int(x1), int(y1)), (0, 0, 255), -1)  # Red filled
-            cv2.rectangle(debug_img, (int(x0), int(y0)), (int(x1), int(y1)), (255, 255, 255), 2)  # White border
-        
-        # Add legend
-        legend_y = 30
-        cv2.putText(debug_img, "GREEN: OCR word boxes", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        cv2.putText(debug_img, "BLUE: Character approximation (sample)", (10, legend_y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-        cv2.putText(debug_img, "RED: Final redaction boxes", (10, legend_y + 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-        
-        # Save debug image
-        cv2.imwrite(debug_output_path, debug_img)
-        logging.info(f"Visual debug image saved: {debug_output_path}")
-        
-        return debug_output_path
-        
-    except Exception as e:
-        logging.error(f"Error creating visual debug image: {e}", exc_info=True)
-        return None
-
-def find_word_segments_for_entity(entity, ocr_word_segments, page_text):
-    """
-    Find OCR word segments that overlap with a detected PII entity.
-    This provides more accurate bounding boxes than character approximation.
-    
-    Args:
-        entity: Presidio entity result with start/end positions
-        ocr_word_segments: List of OCR word segment dictionaries
-        page_text: Full page text string
-        
-    Returns:
-        List of word segments that overlap with the entity
-    """
-    overlapping_segments = []
-    
-    try:
-        entity_text = page_text[entity.start:entity.end]
-        
-        for segment in ocr_word_segments:
-            segment_start = segment['text_start']
-            segment_end = segment['text_end']
-            
-            # Check for overlap between entity and word segment
-            if (entity.start <= segment_start < entity.end or 
-                entity.start < segment_end <= entity.end or
-                (segment_start <= entity.start and segment_end >= entity.end)):
-                
-                overlapping_segments.append(segment)
-                
-                # Log for debugging
-                logging.debug(f"Entity '{entity_text}' overlaps with OCR segment '{segment['text']}' "
-                             f"(confidence: {segment['confidence']:.2f})")
-        
-        if not overlapping_segments:
-            logging.warning(f"No OCR segments found for entity '{entity_text}' at positions {entity.start}-{entity.end}")
-            
-    except Exception as e:
-        logging.error(f"Error finding word segments for entity: {e}")
-        
-    return overlapping_segments

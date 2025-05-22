@@ -429,3 +429,49 @@ class TestDigitalPDFProcessor:
         # Verify the output path
         assert result_path == expected_output
         mock_doc.__enter__.return_value.save.assert_called_with(expected_output)
+
+
+# --- Test for Centralized Temporary Directory ---
+from Redactify.core import config as RedactifyConfig
+
+@patch.object(RedactifyConfig, 'TEMP_DIR', '/mocked/central_temp_dir') # Mock TEMP_DIR
+@patch('Redactify.processors.digital_pdf_processor.fitz.open')
+@patch('Redactify.processors.digital_pdf_processor.os.makedirs')
+@patch('Redactify.processors.digital_pdf_processor.os.path.basename', return_value='test_file.pdf')
+def test_redact_digital_pdf_uses_central_temp_dir(
+    mock_basename, mock_makedirs, mock_fitz_open, mock_analyzer, simple_digital_pdf
+):
+    """Test that redact_digital_pdf uses the centralized TEMP_DIR from config."""
+    
+    # Mock the fitz.open call to return a mock document
+    mock_doc_instance = MagicMock()
+    mock_page_instance = MagicMock()
+    mock_page_instance.get_text.return_value = "Some text with PII like John Doe."
+    mock_doc_instance.pages.return_value = [mock_page_instance] # Simulate as iterable
+    mock_doc_instance.__len__.return_value = 1 # For total_pages calculation
+    mock_doc_instance.__getitem__.return_value = mock_page_instance # For page access doc[page_num]
+    
+    # Ensure the context manager protocol is handled for fitz.open
+    mock_fitz_open.return_value = mock_doc_instance
+
+    pii_types_selected = ['PERSON']
+    
+    # Call the function
+    output_path, redacted_types = redact_digital_pdf(
+        pdf_path=simple_digital_pdf,  # Actual path, but fitz.open is mocked
+        analyzer=mock_analyzer,       # Use the fixture
+        pii_types_selected=pii_types_selected
+    )
+    
+    # Verify os.makedirs was called with the mocked TEMP_DIR
+    # The function calls os.makedirs(TEMP_DIR, exist_ok=True)
+    mock_makedirs.assert_any_call(RedactifyConfig.TEMP_DIR, exist_ok=True)
+    
+    # Verify the output path starts with the mocked TEMP_DIR
+    assert output_path.startswith(RedactifyConfig.TEMP_DIR)
+    
+    # Verify the output filename is correctly formed
+    # The filename is "redacted_digital_" + base_name + ext
+    # mock_basename returns "test_file.pdf", so base_name is "test_file", ext is ".pdf"
+    expected_filename_part = "redacted_digital_test_file.pdf"
+    assert expected_filename_part in output_path

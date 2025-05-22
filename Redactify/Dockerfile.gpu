@@ -1,0 +1,88 @@
+# Dockerfile for Redactify with NVIDIA GPU support
+
+# 1. Base Image
+# Using NVIDIA CUDA base image with CUDA 11.8.0 and CUDNN 8, based on Ubuntu 20.04.
+# This base image provides the necessary CUDA runtime libraries.
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
+
+# 2. Labels
+LABEL maintainer="Redactify Team <contact@redactify.example.com>"
+LABEL description="Redactify application with NVIDIA GPU support for accelerated ML tasks."
+
+# 3. Set Working Directory
+WORKDIR /app
+
+# 4. System Dependencies
+# Install system dependencies required for Python 3.11, OpenCV, Poppler (for PDF processing),
+# and various graphics/utility libraries.
+# Using --no-install-recommends to reduce image size.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    python3-opencv \
+    poppler-utils \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    curl \
+    gnupg && \
+    # Clean up apt cache to reduce image size
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create symlinks for python and pip to point to python3.11 and pip3.
+# This ensures 'python' and 'pip' commands use the Python 3.11 versions.
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
+    ln -sf /usr/bin/pip3 /usr/bin/pip
+
+# Upgrade pip to the latest version
+RUN pip install --no-cache-dir --upgrade pip
+
+# 5. Python Environment & Dependencies
+# Copy the GPU-specific requirements file from the Redactify subdirectory of the build context
+# to /app/requirements_gpu.txt in the image.
+# This file contains dependencies like paddlepaddle-gpu and tensorflow-gpu.
+COPY Redactify/requirements_gpu.txt /app/requirements_gpu.txt
+
+# Install Python dependencies from requirements_gpu.txt.
+# Using --no-cache-dir to reduce image size.
+RUN pip install --no-cache-dir -r /app/requirements_gpu.txt
+
+# 6. Copy Application Code
+# This copies the entire build context (expected to be the project root) into the /app directory in the image.
+# As a result, the 'Redactify' application directory from the host will be at /app/Redactify/ within the container.
+COPY . /app/
+
+# 7. Environment Variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=production
+# FLASK_APP points to the application entry point.
+# Since WORKDIR is /app and the application code is in /app/Redactify/,
+# Redactify.app correctly refers to /app/Redactify/app.py.
+ENV FLASK_APP=Redactify.app
+
+# Environment variables for NVIDIA GPU access within the container.
+# These are typically required for CUDA applications to run correctly.
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+# Add NVIDIA library paths to LD_LIBRARY_PATH.
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:${LD_LIBRARY_PATH}
+
+# 8. Expose Port and Define CMD
+EXPOSE 5000
+
+# CMD instruction for running the application using Gunicorn.
+# Gunicorn looks for 'Redactify.web.app_factory' based on PYTHONPATH.
+# WORKDIR /app ensures /app is in PYTHONPATH, and /app/Redactify contains the package.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "Redactify.web.app_factory:create_app(production=True)", "--workers", "4", "--timeout", "120"]
+
+# Build instructions reminder:
+# This Dockerfile is intended to be placed at `Redactify/Dockerfile.gpu`.
+# It should be built from the project root directory (the parent of `Redactify/`) using a command like:
+# `docker build -f Redactify/Dockerfile.gpu -t redactify-gpu .`
+# The `.` at the end specifies the project root as the build context.

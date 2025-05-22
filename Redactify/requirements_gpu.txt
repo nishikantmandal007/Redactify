@@ -1,5 +1,6 @@
-# This file lists dependencies for running Redactify in CPU mode.
-# For GPU support, see requirements_gpu.txt.
+# This file lists dependencies for running Redactify with NVIDIA GPU acceleration.
+# Ensure you have a compatible NVIDIA driver, CUDA Toolkit, and CUDNN installed.
+# Versions of paddlepaddle-gpu and tensorflow-gpu should match your CUDA/CUDNN setup.
 
 # Redactify - PDF PII Redaction Tool Requirements
 # Core Dependencies
@@ -22,14 +23,16 @@ pyzbar>=0.1.8  # For QR code detection
 
 # Computer Vision & OCR
 Pillow>=9.0.0  # Python Imaging Library
-opencv-python>=4.5.0  # Computer Vision library
-paddleocr>=2.5.0  # OCR engine for text detection (pulls paddlepaddle CPU by default)
+opencv-python>=4.5.0 # For full GPU acceleration in custom utils, this might need to be built from source with CUDA or a specific CUDA-enabled wheel installed.
+paddlepaddle-gpu==2.6.1 # For CUDA 11.x/12.x (check PaddlePaddle docs for exact compatibility)
+paddleocr>=2.5.0  # OCR engine for text detection
 layoutparser>=0.3.4  # For document layout analysis
 
 # PII Detection
 presidio-analyzer>=2.2.0  # Microsoft's PII detection library
 presidio-anonymizer>=2.2.0
-spacy>=3.2.0  # Required by Presidio for NLP (may pull tensorflow CPU if needed)
+spacy>=3.2.0  # Required by Presidio for NLP
+tensorflow-gpu==2.12.0 # Check compatibility with Spacy 3.2 and CUDA 11.x
 pytesseract>=0.3.8  # Optional OCR engine
 
 # Web Interface

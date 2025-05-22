@@ -1,121 +1,96 @@
 version: '3.8'
 
+# Base Docker Compose configuration for CPU-only deployment.
+# GPU settings are applied via docker-compose.override.yml.
+
 services:
-  # Redis service (message broker and result backend)
   redis:
-    image: redis:6-alpine
+    image: "redis:7-alpine"
     ports:
+      # Expose Redis to the host for development/debugging if needed.
+      # For production, consider if this needs to be exposed externally.
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - redis_data:/data # Persist Redis data
     restart: unless-stopped
     networks:
-      - redactify-net
+      - redactify_net
 
-  # Web application frontend
   web:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: .. # Project root (parent of 'docker/' directory)
+      dockerfile: Redactify/Dockerfile # Points to the CPU Dockerfile
+    image: redactify-web-cpu # Optional: define an image name for CPU version
     ports:
       - "5000:5000"
     volumes:
-      - ../upload_files:/app/upload_files
-      - ../temp_files:/app/temp_files
+      # Mounts application code for development; for production, code should be built into the image.
+      # For a production build, you might remove the Redactify volume mount if images are pre-built.
+      - ../Redactify:/app/Redactify
+      # Mounts your custom config.yaml from project root into the container.
+      - ../config.yaml:/app/config.yaml
+      # Example for persistent upload/temp storage (optional, uncomment and adjust host path)
+      # - ./data/uploads:/app/upload_files 
+      # - ./data/temp_files:/app/temp_files
     depends_on:
       - redis
     environment:
-      - FLASK_APP=Redactify/app.py
-      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-default_insecure_key}
-      - REDACTIFY_REDIS_URL=redis://redis:6379/0
-    command: >
-      gunicorn --bind 0.0.0.0:5000 
-      "Redactify.web.app_factory:create_app(production=True)" 
-      --workers ${GUNICORN_WORKERS:-4}
-      --threads ${GUNICORN_THREADS:-2}
-      --timeout ${GUNICORN_TIMEOUT:-120}
-      --keep-alive ${GUNICORN_KEEPALIVE:-5}
-      --access-logfile -
+      - REDIS_URL=redis://redis:6379/0 # Connect to the 'redis' service on this Docker network
+      - FLASK_ENV=production # Set by Dockerfile, confirmed here
+      # - FLASK_APP=Redactify.app # Already set in Dockerfile
+      # Add any other necessary environment variables:
+      # - REDACTIFY_LOG_LEVEL=INFO
+    restart: unless-stopped
     networks:
-      - redactify-net
+      - redactify_net
 
-  # Celery worker for processing PDFs (redaction tasks)
-  worker-redaction:
+  celery_worker:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
-    depends_on:
-      - redis
+      dockerfile: Redactify/Dockerfile # Uses the same CPU Dockerfile
+    image: redactify-celery-cpu # Optional: define an image name for CPU version
+    # Default command for a general worker listening to the 'redaction' queue.
+    # Adjust queue, concurrency, etc., as needed for your workload.
+    command: celery -A Redactify.services.celery_service.celery worker --loglevel=info -Q redaction --concurrency=${CELERY_CONCURRENCY:-2} -E
     volumes:
-      - ../upload_files:/app/upload_files
-      - ../temp_files:/app/temp_files
-    environment:
-      - REDACTIFY_REDIS_URL=redis://redis:6379/0
-    command: >
-      celery -A Redactify.services.celery_service.celery worker
-      --loglevel=info
-      --concurrency=${CELERY_CONCURRENCY:-4}
-      -Q redaction
-      --hostname=redaction@%h
-      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-10}
-    networks:
-      - redactify-net
-
-  # Celery worker for maintenance tasks
-  worker-maintenance:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      - ../Redactify:/app/Redactify
+      - ../config.yaml:/app/config.yaml
+      # - ./data/uploads:/app/upload_files # Ensure consistency with web service if using host paths
+      # - ./data/temp_files:/app/temp_files
     depends_on:
       - redis
-    volumes:
-      - ../upload_files:/app/upload_files
-      - ../temp_files:/app/temp_files
     environment:
-      - REDACTIFY_REDIS_URL=redis://redis:6379/0
-    command: >
-      celery -A Redactify.services.celery_service.celery worker
-      --loglevel=info
-      --concurrency=1
-      -Q maintenance
-      --hostname=maintenance@%h
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+      # - C_FORCE_ROOT=true # If Celery needs to run as root (avoid in production if possible)
+    restart: unless-stopped
     networks:
-      - redactify-net
-
-  # Celery beat for scheduled tasks (optional)
-  beat:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    depends_on:
-      - redis
-    volumes:
-      - ../temp_files:/app/temp_files
-    environment:
-      - REDACTIFY_REDIS_URL=redis://redis:6379/0
-    command: celery -A Redactify.services.celery_service.celery beat --loglevel=info
-    networks:
-      - redactify-net
-
-  # Flower for monitoring Celery tasks (optional)
-  flower:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    ports:
-      - "5555:5555"
-    depends_on:
-      - redis
-      - worker-redaction
-    environment:
-      - REDACTIFY_REDIS_URL=redis://redis:6379/0
-    command: celery -A Redactify.services.celery_service.celery flower --port=5555 --address=0.0.0.0
-    networks:
-      - redactify-net
+      - redactify_net
+  
+  # To run Celery Beat for scheduled tasks (e.g., cleanup_expired_files):
+  # celery_beat:
+  #   build:
+  #     context: ..
+  #     dockerfile: Redactify/Dockerfile
+  #   image: redactify-celery-beat-cpu
+  #   command: celery -A Redactify.services.celery_service.celery beat --loglevel=info
+  #   volumes:
+  #     - ../Redactify:/app/Redactify
+  #     - ../config.yaml:/app/config.yaml
+  #     # - ./data/temp_files:/app/temp_files # If beat needs access to temp files for cleanup logic
+  #   depends_on:
+  #     - redis
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379/0
+  #     - FLASK_ENV=production
+  #   restart: unless-stopped
+  #   networks:
+  #     - redactify_net
 
 networks:
-  redactify-net:
+  redactify_net:
     driver: bridge
 
 volumes:
-  redis-data:
+  redis_data:
+    driver: local

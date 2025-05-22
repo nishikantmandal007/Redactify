@@ -11,6 +11,7 @@ import re
 from typing import List, Dict, Any, Optional, Tuple, Set
 from ..recognizers.entity_types import QR_CODE_ENTITY
 from ..utils.gpu_utils import GPUResourceManager
+from ..core.config import TEMP_DIR # Import TEMP_DIR from config
 
 def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None, confidence_threshold=0.6, barcode_types_to_redact=None, task_context=None):
     """
@@ -88,9 +89,9 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                     text = page.get_text()
                     
                     # Add detailed logging for extracted text
-                    logging.info(f"=== TEXT EXTRACTED FROM PAGE {page_num+1} ===")
-                    logging.info(text)
-                    logging.info("="*50)
+                    logging.debug(f"=== TEXT EXTRACTED FROM PAGE {page_num+1} ===")
+                    logging.debug(text)
+                    logging.debug("="*50)
                     
                     if text.strip():  # Only analyze if there's text content
                         # Analyze text for PII entities with Presidio
@@ -105,7 +106,7 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                             logging.info(f"Found {len(analyzer_results)} potential PII entities on page {page_num+1}")
                             for entity in analyzer_results:
                                 entity_text = text[entity.start:entity.end]
-                                logging.info(f"  Entity: {entity.entity_type}, Text: '{entity_text}', Score: {entity.score}")
+                                logging.debug(f"  Entity: {entity.entity_type}, Text: '{entity_text}', Score: {entity.score}") # Changed to debug
                         else:
                             logging.info(f"No PII entities found on page {page_num+1}")
                         
@@ -248,10 +249,9 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                     logging.error(f"Error processing batch: {e}", exc_info=True)
         
         # Save Document
-        output_dir = os.path.dirname(os.path.dirname(pdf_path))
-        temp_dir = os.path.join(output_dir, "temp_files")
-        os.makedirs(temp_dir, exist_ok=True)
-        output_path = os.path.join(temp_dir, redacted_filename)
+        # Ensure the central TEMP_DIR exists (though it should be created at startup by config.py)
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        output_path = os.path.join(TEMP_DIR, redacted_filename)
         
         # Progress update
         if task_context:
