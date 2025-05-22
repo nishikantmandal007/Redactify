@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# Redactify/services/tasks.py
 import os
 import logging
 import imghdr
@@ -35,11 +34,17 @@ RETRY_KWARGS = {
              queue='redaction',
              retry_kwargs=RETRY_KWARGS,
              rate_limit='4/m')
-def perform_redaction(self, file_path, pii_types_selected, custom_rules):
+def perform_redaction(self, file_path, pii_types_selected, custom_rules, enable_visual_debug=False):
     """
     Celery task to perform the redaction. Includes progress and error handling.
     
     Optimized for better resource management and scaling.
+    
+    Args:
+        file_path: Path to the file to redact
+        pii_types_selected: List of PII types to redact
+        custom_rules: Dictionary of custom rules for redaction
+        enable_visual_debug: Whether to enable visual debugging output
     """
     redacted_file_path = None  # Initialize
     original_file_deleted = False
@@ -109,7 +114,7 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules):
             
             logging.info(f"Task {task_id}: Detected image file by {detection_str}: {filename_for_log}")
             self.update_state(state='PROGRESS', meta={'current': 10, 'total': 100, 'status': f'Processing image file: {filename_for_log}'})
-            redacted_file_path, redacted_types_set = redact_image(file_path, pii_types_selected, custom_rules, self, barcode_types_to_redact)
+            redacted_file_path, redacted_types_set = redact_image(file_path, pii_types_selected, custom_rules, self, barcode_types_to_redact, enable_visual_debug)
         else:
             # Process PDF file
             logging.info(f"Task {task_id}: Processing as PDF: {filename_for_log}")
@@ -136,14 +141,14 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules):
                     state='PROGRESS', 
                     meta={'current': 10, 'total': 100, 'status': f'Processing digital PDF file: {filename_for_log}'}
                 )
-                redacted_file_path, redacted_types_set = redact_digital_pdf(file_path, pii_types_selected, custom_rules, self, barcode_types_to_redact)
+                redacted_file_path, redacted_types_set = redact_digital_pdf(file_path, pii_types_selected, custom_rules, self, barcode_types_to_redact, enable_visual_debug)
             else:  # scanned
                 logging.info(f"Task {task_id}: Detected SCANNED PDF ({reason_code}): {filename_for_log}") # Added reason_code
                 self.update_state(
                     state='PROGRESS', 
                     meta={'current': 10, 'total': 100, 'status': f'Processing scanned PDF (OCR required): {filename_for_log}'}
                 )
-                redacted_file_path, redacted_types_set = redact_scanned_pdf(file_path, pii_types_selected, custom_rules, self, barcode_types_to_redact)
+                redacted_file_path, redacted_types_set = redact_scanned_pdf(file_path, pii_types_selected, custom_rules, self, barcode_types_to_redact, enable_visual_debug)
 
         # Validate output file
         if not redacted_file_path or not os.path.exists(redacted_file_path):
