@@ -32,7 +32,11 @@ DEFAULT_CONFIG = {
     "temp_file_max_age_seconds": 86400,  # Default 1 day
     "host": "127.0.0.1",
     "port": 5000,
-    "log_level": "INFO"
+    "log_level": "INFO",
+    "task_max_memory_percent": 85,  # Default max memory percent for tasks
+    "task_healthy_cpu_percent": 80,  # Default healthy CPU percent for tasks
+    "gpu_memory_fraction_tf_general": 0.2, # Default TensorFlow general GPU memory fraction
+    "gpu_memory_fraction_tf_nlp": 0.3      # Default TensorFlow NLP-specific GPU memory fraction
 }
 
 # Define required keys based on defaults (ensures structure check)
@@ -49,6 +53,10 @@ ENV_VAR_MAPPING = {
     "REDACTIFY_PRESIDIO_THRESHOLD": "presidio_confidence_threshold",
     "REDACTIFY_TEMP_FILE_AGE": "temp_file_max_age_seconds",
     "REDACTIFY_LOG_LEVEL": "log_level",
+    "REDACTIFY_TASK_MAX_MEMORY_PERCENT": "task_max_memory_percent",
+    "REDACTIFY_TASK_HEALTHY_CPU_PERCENT": "task_healthy_cpu_percent",
+    "REDACTIFY_GPU_MEMORY_FRACTION_TF_GENERAL": "gpu_memory_fraction_tf_general",
+    "REDACTIFY_GPU_MEMORY_FRACTION_TF_NLP": "gpu_memory_fraction_tf_nlp",
 }
 
 
@@ -155,6 +163,27 @@ CELERY_TASK_HARD_TIME_LIMIT = get_config_value("celery_task_hard_time_limit", va
 TEMP_FILE_MAX_AGE_SECONDS = get_config_value("temp_file_max_age_seconds", value_type=int)
 LOG_LEVEL = get_config_value("log_level")
 
+# Task resource limits
+TASK_MAX_MEMORY_PERCENT = get_config_value("task_max_memory_percent", value_type=int)
+"""Maximum memory percentage a task should consume before triggering warnings or retries."""
+
+TASK_HEALTHY_CPU_PERCENT = get_config_value("task_healthy_cpu_percent", value_type=int)
+"""CPU percentage considered healthy; tasks might be skipped or rescheduled above this."""
+
+# GPU Memory Configuration Strategy:
+# TensorFlow (used by Spacy/Presidio) benefits from having its GPU memory fraction explicitly set
+# via `set_logical_device_configuration`. This helps prevent TF from allocating all available GPU memory.
+# PaddleOCR (used for OCR tasks) typically tries to allocate the memory it needs dynamically.
+# By setting TF's memory limits, we reserve memory for TF and leave the rest for PaddleOCR and system overhead.
+# The sum of GPU_MEMORY_FRACTION_TF_GENERAL and GPU_MEMORY_FRACTION_TF_NLP should ideally be < 0.8
+# to leave ample room for PaddleOCR, other potential GPU users, and system overhead.
+# Users might need to adjust these fractions based on their specific GPU memory capacity and workload.
+GPU_MEMORY_FRACTION_TF_GENERAL = get_config_value("gpu_memory_fraction_tf_general", value_type=float)
+"""GPU memory fraction for general TensorFlow operations (e.g., in app.py initializations)."""
+
+GPU_MEMORY_FRACTION_TF_NLP = get_config_value("gpu_memory_fraction_tf_nlp", value_type=float)
+"""GPU memory fraction specifically for the Presidio/Spacy TensorFlow backend (in analyzers.py)."""
+
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 # --- Create Directories ---
@@ -178,3 +207,7 @@ logging.info(f"Using OCR confidence threshold: {OCR_CONFIDENCE_THRESHOLD}")
 logging.info(f"Redis URL: {REDIS_URL}")
 logging.info(f"Max file size: {MAX_FILE_SIZE_MB} MB")
 logging.info(f"Log level: {LOG_LEVEL}")
+logging.info(f"Task max memory percent: {TASK_MAX_MEMORY_PERCENT}%")
+logging.info(f"Task healthy CPU percent: {TASK_HEALTHY_CPU_PERCENT}%")
+logging.info(f"GPU Memory Fraction for TensorFlow (General): {GPU_MEMORY_FRACTION_TF_GENERAL}")
+logging.info(f"GPU Memory Fraction for TensorFlow (NLP): {GPU_MEMORY_FRACTION_TF_NLP}")

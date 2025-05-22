@@ -8,7 +8,7 @@ import argparse
 
 # Create the Flask application using the app factory
 from .web.app_factory import create_app
-from .core.config import HOST, PORT
+from .core.config import HOST, PORT, GPU_MEMORY_FRACTION_TF_GENERAL # Import new config
 
 # For celery integration
 from .services.celery_service import celery
@@ -19,9 +19,10 @@ from .utils.gpu_utils import is_gpu_available, configure_gpu_memory, cleanup_gpu
 def initialize_gpu():
     """Initialize GPU resources if available."""
     if is_gpu_available():
-        # Configure GPU memory to avoid OOM errors
-        configure_gpu_memory(memory_fraction=0.8)
-        logging.info("GPU acceleration enabled for Redactify")
+        # Configure GPU memory for general TensorFlow operations
+        # This is a global setting for any TF ops not specifically configured elsewhere.
+        configure_gpu_memory(memory_fraction=GPU_MEMORY_FRACTION_TF_GENERAL)
+        logging.info(f"GPU acceleration enabled for Redactify. General TF GPU memory fraction set to: {GPU_MEMORY_FRACTION_TF_GENERAL}")
     else:
         logging.info("Running in CPU-only mode")
 

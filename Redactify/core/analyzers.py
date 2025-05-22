@@ -9,7 +9,8 @@ import gc
 import psutil
 import time
 from ..recognizers import custom_recognizer_list, get_custom_pii_entity_names
-from .config import PRESIDIO_CONFIG as PRESDIO_CONFIG  # Maintain original variable name for compatibility
+# Import new config for TF NLP memory fraction
+from .config import PRESIDIO_CONFIG as PRESDIO_CONFIG, GPU_MEMORY_FRACTION_TF_NLP 
 from .pii_types import get_pii_types, get_pii_friendly_names, get_all_pii_types
 from ..utils.gpu_utils import is_gpu_available, initialize_paddle_gpu, configure_gpu_memory, get_gpu_info
 
@@ -25,8 +26,10 @@ try:
         gpu_info = get_gpu_info()
         logging.info(f"Initializing NLP engine with GPU acceleration: {gpu_info}")
         
-        # Configure GPU memory more conservatively for NLP engine to leave room for other components
-        configure_gpu_memory(memory_fraction=0.7)
+        # Configure GPU memory specifically for the Presidio/Spacy TensorFlow backend.
+        # This helps reserve a portion of GPU memory for NLP tasks, leaving the rest for PaddleOCR.
+        configure_gpu_memory(memory_fraction=GPU_MEMORY_FRACTION_TF_NLP)
+        logging.info(f"NLP TF GPU memory fraction set to: {GPU_MEMORY_FRACTION_TF_NLP}")
         
         # Set TensorFlow environment variables for better GPU performance
         os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
@@ -76,7 +79,12 @@ def get_paddle_ocr():
             return ocr
             
         try:
-            # Initialize PaddleOCR with GPU support
+            # Initialize PaddleOCR with GPU support.
+            # PaddleOCR manages its GPU memory dynamically. By pre-allocating memory for TensorFlow
+            # (via GPU_MEMORY_FRACTION_TF_GENERAL and GPU_MEMORY_FRACTION_TF_NLP in config),
+            # we ensure TensorFlow doesn't consume all GPU memory, leaving room for PaddleOCR.
+            # The effectiveness depends on the sum of TF fractions being less than 1.0,
+            # ideally < 0.8 to also account for system overhead and PaddleOCR's needs.
             gpu_enabled = initialize_paddle_gpu()
             
             # Configure OCR parameters based on available resources
