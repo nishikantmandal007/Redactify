@@ -1,0 +1,57 @@
+version: '3.8'
+
+# Docker Compose override file for NVIDIA GPU-accelerated deployment.
+# This file should be used in conjunction with the base docker-compose.yml:
+# `docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build`
+
+services:
+  web:
+    build:
+      # Override the Dockerfile to use the GPU-specific version
+      dockerfile: Redactify/Dockerfile.gpu
+    image: redactify-web-gpu # Optional: define a distinct image name for GPU version
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1 # Request 1 GPU. Use 'all' for all available GPUs, or specify by ID.
+              capabilities: [gpu, utility, compute] # Required capabilities for CUDA applications
+    runtime: nvidia # Specify the NVIDIA runtime (may be default on some systems with nvidia-container-toolkit)
+    # Ports, volumes, depends_on, and most environment variables are inherited from docker-compose.yml
+    # Only specify environment variables here if they need to be different for the GPU setup.
+
+  celery_worker:
+    build:
+      # Override the Dockerfile to use the GPU-specific version
+      dockerfile: Redactify/Dockerfile.gpu
+    image: redactify-celery-gpu # Optional: define a distinct image name for GPU version
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1 # Request 1 GPU. Use 'all' for all available GPUs, or specify by ID.
+              capabilities: [gpu, utility, compute]
+    runtime: nvidia
+    # Command, volumes, depends_on, and most environment variables are inherited.
+    # If GPU workers need different concurrency or queues, override 'command' or ENV VARS here.
+    # For example, to ensure GPU worker uses a specific concurrency:
+    # environment:
+    #   - CELERY_CONCURRENCY=1 # Often, 1 worker per GPU is optimal for ML tasks
+
+  # The 'redis' service definition is inherited entirely from docker-compose.yml
+  # and does not need to be repeated here.
+
+  # If you had a 'celery_beat' service and it does NOT require GPU,
+  # it would also be inherited as is from the base docker-compose.yml.
+  # If it did require GPU (unlikely for beat), it would be defined here similarly.
+
+# Networks and volumes are also typically inherited from the base docker-compose.yml.
+# networks:
+#   redactify_net:
+#     driver: bridge
+
+# volumes:
+#   redis_data:
+#     driver: local
