@@ -14,7 +14,7 @@
 **🎯 Enterprise-grade automated PII detection and redaction for documents and images**
 **🚀 Powered by AI, Built for Scale, Designed for Security**
 
-[📖 Documentation](#-documentation) • [⚡ Quick Start](#-quick-start) • [🔧 Installation](#-installation) • [🌟 Features](#-features) • [📊 API Reference](#-api-usage)
+[📖 Documentation](https://github.com/nishikantmandal007/Redactify/blob/main/docs/) • [🚀 Getting Started](#-getting-started) • [🔧 Installation Options](#-installation-options) • [🌟 Features](#-key-features) • [📊 API Reference](https://github.com/nishikantmandal007/Redactify/blob/main/docs/api.md)
 
 </div>
 
@@ -47,8 +47,6 @@
 ---
 
 ## ✨ Key Features
-
-### 🔍 **Advanced PII Detection**
 
 ### 🔍 **Advanced PII Detection**
 
@@ -116,7 +114,77 @@ graph TB
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Getting Started
+
+### Multiple Installation Options
+
+Redactify provides multiple ways to install depending on your needs:
+
+1. **[Quick One-Line Script](#1️⃣-one-line-quick-installation)**: Fastest way to get started
+2. **[Docker Containers](#2️⃣-docker-installation)**: Production-ready deployment
+3. **[Manual Installation](#3️⃣-manual-installation)**: Full control and customization
+4. **[GPU Acceleration](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md#-gpu-acceleration-setup)**: High-performance setup
+
+All methods provide an isolated environment (virtual env or container) for safe installation.
+
+For comprehensive documentation, see our [Installation Guide](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md).
+
+### Prerequisites
+
+- **Python 3.10+** (3.11 recommended)  
+- **4GB+ RAM** (8GB+ recommended)
+- **NVIDIA GPU** (optional, for acceleration)
+
+> **Note:** The quick installation script automatically handles all system dependencies including Redis, build tools, and Python packages.
+
+## 🔧 Installation Options
+
+### 1️⃣ One-Line Quick Installation
+
+> **Best for:** Quick testing & demos - Automatically creates virtual environment
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+```
+
+This script automatically:
+
+- ✅ Detects your OS (Ubuntu/Debian/RHEL/Arch/macOS)
+- ✅ Installs system dependencies (Redis, Python, build tools, etc.)
+- ✅ Creates an isolated Python virtual environment
+- ✅ Installs all Python dependencies
+- ✅ Downloads required NLP models
+- ✅ Sets up configuration files
+- ✅ Creates startup/stop scripts
+- ✅ Verifies the installation
+
+**Start Redactify:** `cd ~/redactify && ./start-redactify.sh`
+
+### 2️⃣ Docker Installation
+
+> **Best for:** Production environments & containerized deployment
+
+```bash
+# Clone repository
+git clone https://github.com/nishikantmandal007/Redactify.git
+cd Redactify
+
+# Launch using Docker Compose
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+**Access at:** <http://localhost:5000>
+
+**Additional Docker Options:**
+
+- **Production setup:** `docker-compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d`
+- **GPU support:** `docker-compose -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d`
+- **Scaling workers:** `docker-compose -f docker/docker-compose.yml up -d --scale worker=4`
+
+### 3️⃣ Manual Installation
+
+<details>
+<summary>Click to expand manual installation steps</summary>
 
 ### Prerequisites
 
@@ -130,7 +198,7 @@ graph TB
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/Redactify.git
+git clone https://github.com/nishikantmandal007/Redactify.git
 cd Redactify
 
 # Create virtual environment
@@ -154,7 +222,7 @@ brew services start redis   # macOS
 # Windows: Download and install Redis
 
 # Configure application (optional - defaults work)
-cp config.yaml.template config.yaml  # If you need custom settings
+cp config.yaml config.yaml  # If you need custom settings
 nano config.yaml  # Edit as needed
 
 # Run Redactify with all components
@@ -166,6 +234,8 @@ python Redactify/main.py --api-only  # API server only
 python Redactify/main.py --disable-gpu  # Force CPU mode
 ```
 
+</details>
+
 ### 🐳 Docker Quick Start
 
 ```bash
@@ -175,8 +245,6 @@ docker-compose -f docker/docker-compose.yml up -d
 # GPU-accelerated deployment
 docker-compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
 ```
-
----
 
 ## 📚 Documentation
 
@@ -266,7 +334,7 @@ preview = requests.get(f'http://localhost:5000/preview/{task_id}')
 
 ### Project Structure
 
-```
+```text
 Redactify/
 ├── main.py              # Application entry point with multi-process support
 ├── app.py               # Alternative entry point
@@ -377,12 +445,39 @@ redis_url: redis://localhost:6379/0
 
 ---
 
+## 📚 Documentation Resources
+
+| Resource | Description | Link |
+|----------|-------------|------|
+| **Installation Guide** | Comprehensive setup instructions | [installation.md](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md) |
+| **Docker Guide** | Container deployment options | [docker/README.md](https://github.com/nishikantmandal007/Redactify/blob/main/docker/README.md) |
+| **API Documentation** | REST API reference | [docs/api.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/api.md) |
+| **Configuration** | Configuration options | [docs/configuration.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/configuration.md) |
+| **Architecture** | System design | [docs/architecture.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/architecture.md) |
+| **Troubleshooting** | Common issues | [docs/troubleshooting.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/troubleshooting.md) |
+| **Developer Guide** | Contributing to Redactify | [docs/developer-guide.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/developer-guide.md) |
+
+### 📑 Installation Types
+
+| Installation Method | Documentation Link | Best For |
+|--------------------|---------------------|----------|
+| **One-Line Script** | [Quick Start](#1️⃣-one-line-quick-installation) | Quick testing, demos |
+| **Docker** | [Docker Installation](#2️⃣-docker-installation) | Production, team environments |
+| **Manual Setup** | [Manual Installation](#3️⃣-manual-installation) | Development, customization |
+| **GPU Acceleration** | [GPU Setup](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md#-gpu-acceleration-setup) | High-volume processing |
+
+### 📖 Documentation Website
+
+For a more interactive experience, visit our [Documentation Website](https://nishikantmandal007.github.io/Redactify/) (coming soon).
+
+---
+
 ## 🤝 Support & Community
 
 - **📧 Email Support** - [support@redactify.com](mailto:support@redactify.com)
-- **🐛 Bug Reports** - [GitHub Issues](https://github.com/yourusername/Redactify/issues)
-- **💬 Discussions** - [GitHub Discussions](https://github.com/yourusername/Redactify/discussions)
-- **📖 Wiki** - [Project Wiki](https://github.com/yourusername/Redactify/wiki)
+- **🐛 Bug Reports** - [GitHub Issues](https://github.com/nishikantmandal007/Redactify/issues)
+- **💬 Discussions** - [GitHub Discussions](https://github.com/nishikantmandal007/Redactify/discussions)
+- **📖 Wiki** - [Project Wiki](https://github.com/nishikantmandal007/Redactify/wiki)
 
 ---
 
@@ -405,6 +500,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by the Redactify Team**
 
-[⭐ Star us on GitHub](https://github.com/yourusername/Redactify) | [🐛 Report Issues](https://github.com/yourusername/Redactify/issues) | [📖 Documentation](docs/)
+[⭐ Star us on GitHub](https://github.com/nishikantmandal007/Redactify) | [🐛 Report Issues](https://github.com/nishikantmandal007/Redactify/issues) | [📖 Documentation](https://github.com/nishikantmandal007/Redactify/blob/main/docs/)
 
 </div>

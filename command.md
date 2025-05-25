@@ -728,6 +728,6 @@ export FLASK_ENV="development"
 
 ---
 
-**Need Help?** 📞 [Create an Issue](https://github.com/yourusername/Redactify/issues) | 💬 [Join Discussions](https://github.com/yourusername/Redactify/discussions) | 📖 [Read Docs](docs/)
+**Need Help?** 📞 [Create an Issue](https://github.com/nishikantmandal007/Redactify/issues) | 💬 [Join Discussions](https://github.com/nishikantmandal007/Redactify/discussions) | 📖 [Read Docs](docs/)
 
 </div>

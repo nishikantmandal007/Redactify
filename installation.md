@@ -10,54 +10,219 @@
 
 </div>
 
+## 🔍 Quick Reference
+
+> **Choose your preferred installation method:**
+
+| Method | Quick Command | Best For | Estimated Time |
+|--------|--------------|----------|----------------|
+| **One-Line Script** | `curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh \| bash` | Testing, Demo | 5 minutes |
+| **Docker** | `docker-compose -f docker/docker-compose.yml up -d` | Production | 10 minutes |
+| **Manual** | Step-by-step instructions in [Manual Installation](#-manual-installation) | Development | 15 minutes |
+| **GPU** | Instructions in [GPU Setup](#-gpu-acceleration-setup) | High Performance | 30 minutes |
+
 ---
 
 ## 📋 Table of Contents
 
 - [🎯 Overview](#-overview)
-- [⚡ Quick Start](#-quick-start)
-- [🔧 Prerequisites](#-prerequisites)
-- [💻 Manual Installation](#-manual-installation)
-- [🐳 Docker Installation](#-docker-installation)
-- [🚀 GPU Acceleration Setup](#-gpu-acceleration-setup)
+- [🔄 Installation Methods](#-installation-methods)
+  - [⚡ Quick Start (One-Line Script)](#-quick-start)
+  - [💻 Manual Installation](#-manual-installation)
+  - [🐳 Docker Installation](#-docker-installation)
+  - [🚀 GPU Acceleration Setup](#-gpu-acceleration-setup)
 - [⚙️ Configuration](#️-configuration)
 - [🔍 Verification](#-verification)
 - [🐛 Troubleshooting](#-troubleshooting)
 - [📈 Performance Optimization](#-performance-optimization)
+- [🗑️ Uninstallation](#️-uninstallation)
+- [📊 Installation Status](#-installation-status)
 
 ---
 
 ## 🎯 Overview
 
+Redactify supports multiple installation methods designed for different use cases. **All methods create isolated environments** to prevent conflicts with your system packages.
+
+### 📊 Installation Methods at a Glance
+
+| Feature | One-Line Script | Manual Installation | Docker | GPU Accelerated |
+|---------|----------------|-------------------|--------|----------------|
+| **Best For** | Quick testing | Development | Production | High volume processing |
+| **Setup Time** | ⏱️ 5 minutes | ⏱️⏱️ 15 minutes | ⏱️⏱️ 10 minutes | ⏱️⏱️⏱️ 30 minutes |
+| **Complexity** | 🔵 Beginner | 🟡 Intermediate | 🟡 Intermediate | 🔴 Advanced |
+| **Isolation Method** | Virtual Env | Virtual Env | Docker Container | Either |
+| **OS Support** | Linux, macOS | All | All | Linux (Ubuntu/Debian) |
+| **Auto Updates** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **Auto Dependency Install** | ✅ Yes | ❌ No | ✅ Yes | 🔶 Partial |
+| **Performance** | 🌟🌟 | 🌟🌟 | 🌟🌟🌟 | 🌟🌟🌟🌟🌟 |
+| **Installation Command** | One curl command | Multiple steps | docker-compose | Multiple steps |
+| **Startup Script** | `./start-redactify.sh` | Manual commands | `docker-compose up` | Mixed |
+
+**🔒 Virtual Environment Benefits:**
+
+- ✅ **Isolation**: No conflicts with system Python packages
+- ✅ **Safety**: Easy to remove without affecting other projects  
+- ✅ **Consistency**: Reproducible environments across systems
+- ✅ **Security**: Contained package installations
+
 This comprehensive guide covers all installation methods for Redactify, from simple local development setups to production-ready deployments with GPU acceleration. Choose the method that best fits your environment and requirements.
 
-### 🌟 Installation Options
+## 🔄 Installation Methods
 
-| Method | Best For | Complexity | Setup Time |
-|--------|----------|------------|------------|
-| **Quick Start** | Testing & Demo | ⭐ Easy | 5 minutes |
-| **Manual Setup** | Development | ⭐⭐ Medium | 15 minutes |
-| **Docker** | Production | ⭐⭐ Medium | 10 minutes |
-| **GPU Accelerated** | High Performance | ⭐⭐⭐ Advanced | 30 minutes |
+Choose the installation method that best suits your needs:
+
+| Method | Best For | Complexity | Setup Time | Isolated Env |
+|--------|----------|------------|------------|--------------|
+| [**One-Line Script**](#-quick-start) | Testing & Demo | ⭐ Easy | 5 minutes | ✅ Virtual Env |
+| [**Manual Setup**](#-manual-installation) | Development | ⭐⭐ Medium | 15 minutes | ✅ Virtual Env |
+| [**Docker**](#-docker-installation) | Production | ⭐⭐ Medium | 10 minutes | ✅ Container |
+| [**GPU Accelerated**](#-gpu-acceleration-setup) | High Performance | ⭐⭐⭐ Advanced | 30 minutes | ✅ Both Options |
+
+### 🔍 Installation Decision Flow
+
+```mermaid
+graph TD
+    A[Start] --> B{Have Docker?}
+    B -->|Yes| C{Need Production Setup?}
+    B -->|No| D{Have GPU?}
+    
+    C -->|Yes| E[Docker Production Setup]
+    C -->|No| F[Docker Development Setup]
+    
+    D -->|Yes| G{Deep Technical Knowledge?}
+    D -->|No| H[One-Line Installation]
+    
+    G -->|Yes| I[Manual GPU Installation]
+    G -->|No| J[One-Line Installation with GPU]
+    
+    E --> K[docker-compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d]
+    F --> L[docker-compose -f docker/docker-compose.yml up -d]
+    H --> M[curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash]
+    I --> N[Manual steps with GPU packages]
+    J --> O[export REDACTIFY_FORCE_GPU=true && curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash]
+```
+
+### How to Choose the Right Method
+
+#### 1️⃣ One-Line Installation
+
+**Best for:** New users, quick testing, demonstrations
+
+- ✅ **Pros:**
+  - Fastest setup (5 minutes)
+  - Handles all dependencies automatically
+  - Creates isolated virtual environment
+  - No manual configuration needed
+- ❌ **Cons:**
+  - Less customization options
+  - Limited to supported operating systems
+- **Requirements:** Linux/macOS/WSL
+- **Command:** `curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash`
+
+#### 2️⃣ Manual Installation
+
+**Best for:** Developers, customization needs, learning the system
+
+- ✅ **Pros:**
+  - Full control over installation process
+  - Customizable dependencies
+  - Better understanding of system components
+  - Works on any platform with Python support
+- ❌ **Cons:**
+  - More time-consuming (15 minutes+)
+  - Requires technical knowledge
+  - Must handle dependencies manually
+- **Requirements:** Python 3.10+, Redis, Git
+- **Command:** See [Manual Installation](#-manual-installation) section
+
+#### 3️⃣ Docker Installation
+
+**Best for:** Production deployment, team environments, DevOps
+
+- ✅ **Pros:**
+  - Consistent environment across deployments
+  - Easy scaling with docker-compose
+  - Isolated from host system
+  - Production-ready configuration
+- ❌ **Cons:**
+  - Requires Docker knowledge
+  - Higher resource overhead
+  - More complex configuration for advanced use cases
+- **Requirements:** Docker Engine, Docker Compose
+- **Command:** `docker-compose -f docker/docker-compose.yml up -d`
+
+#### 4️⃣ GPU Acceleration
+
+**Best for:** Processing large document volumes, high throughput requirements
+
+- ✅ **Pros:**
+  - 5-10x faster processing
+  - Better handling of large documents
+  - Improved accuracy for complex layouts
+- ❌ **Cons:**
+  - Hardware requirements (NVIDIA GPU)
+  - More complex setup
+  - Higher system requirements
+- **Requirements:** NVIDIA GPU, CUDA drivers
+- **Command:** Various options available in [GPU Acceleration Setup](#-gpu-acceleration-setup) section
 
 ---
 
 ## ⚡ Quick Start
 
-> **Perfect for:** Testing Redactify quickly without complex setup
+> **Perfect for:** Testing Redactify quickly without complex setup. **Automatically creates a virtual environment.**
 
-### 🚀 One-Command Installation
+### 🚀 One-Line Installation (Recommended)
+
+**Complete automated setup in an isolated virtual environment:**
 
 ```bash
-# Download and run the quick setup script
-curl -fsSL https://raw.githubusercontent.com/yourusername/Redactify/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
 ```
+
+**Available Installation Options:**
+
+| Option | Description | How to Use |
+|--------|-------------|------------|
+| **Custom Location** | Install in a specific directory | `export REDACTIFY_INSTALL_DIR="/path/to/custom/location"` before running |
+| **Offline Install** | Install without internet access | Download script first, then run with `./quick-install.sh --offline` |
+| **GPU Only** | Skip CPU-only packages | `export REDACTIFY_FORCE_GPU=true` before running |
+| **Skip Redis** | Use existing Redis server | `export REDACTIFY_SKIP_REDIS=true` before running |
+| **Debug Mode** | Verbose installation output | Run with `bash -x quick-install.sh` |
+
+**What this script does:**
+
+- ✅ **Creates isolated Python virtual environment** in `~/redactify/venv`
+- ✅ Detects your OS and installs system dependencies
+- ✅ Installs and configures Redis server
+- ✅ Installs all Python packages (Celery, Flask, Presidio, PaddleOCR, etc.)
+- ✅ Downloads required NLP models (spaCy)
+- ✅ Sets up configuration files
+- ✅ Creates startup scripts (`start-redactify.sh`, `stop-redactify.sh`)
+- ✅ Verifies installation
+
+**After installation:**
+
+```bash
+cd ~/redactify
+./start-redactify.sh  # Starts all services in virtual environment
+```
+
+**Supported Systems:**
+
+- Ubuntu/Debian Linux
+- RHEL/CentOS/Fedora Linux  
+- Arch Linux
+- macOS
 
 ### 📝 Manual Quick Setup
 
+For manual installation with virtual environment:
+
 ```bash
-# 1. Clone and setup
-git clone https://github.com/yourusername/Redactify.git
+# 1. Clone and setup virtual environment
+git clone https://github.com/nishikantmandal007/Redactify.git
 cd Redactify
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
@@ -76,7 +241,7 @@ cp config.yaml config.yaml
 python -m Redactify.main
 ```
 
-🎉 **That's it!** Open `http://localhost:5000` in your browser.
+🎉 **Access Redactify at:** `http://localhost:5000`
 
 ---
 
@@ -144,7 +309,7 @@ mkdir -p ~/redactify-workspace
 cd ~/redactify-workspace
 
 # Clone repository
-git clone https://github.com/yourusername/Redactify.git
+git clone https://github.com/nishikantmandal007/Redactify.git
 cd Redactify
 
 # Create isolated Python environment
@@ -268,7 +433,7 @@ brew install docker docker-compose
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/Redactify.git
+git clone https://github.com/nishikantmandal007/Redactify.git
 cd Redactify
 
 # CPU-only deployment
@@ -763,6 +928,83 @@ open http://localhost:5555
 
 ---
 
+## 🗑️ Uninstallation
+
+### Quick Uninstall
+
+To completely remove Redactify and all its components:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/uninstall.sh | bash
+```
+
+This script will:
+
+- ✅ Stop all running services
+- ✅ Remove the complete installation directory (`~/redactify`)
+- ✅ Clean up virtual environment and all Python packages
+- ✅ Remove systemd services (if installed)
+- ✅ Clean Redactify-specific Redis data
+- ✅ Remove temporary files
+
+## 📊 Installation Status
+
+To check the status of your Redactify installation:
+
+```bash
+cd ~/redactify
+./scripts/installation-status.sh
+```
+
+This script shows:
+
+- Current installation command
+- Available installation scripts
+- Documentation status
+- Repository information
+- Completed features
+- ✅ Optionally remove Redis server
+
+### Manual Uninstall
+
+If you prefer manual removal:
+
+```bash
+# Stop services
+cd ~/redactify
+./stop-redactify.sh
+
+# Remove systemd service (if exists)
+sudo systemctl stop redactify.service
+sudo systemctl disable redactify.service
+sudo rm -f /etc/systemd/system/redactify.service
+sudo systemctl daemon-reload
+
+# Clean Redis data (optional)
+redis-cli del redaction maintenance
+redis-cli eval "for i, name in ipairs(redis.call('KEYS', 'redactify:*')) do redis.call('DEL', name) end" 0
+
+# Remove installation
+rm -rf ~/redactify
+
+# Remove temp files
+rm -rf /tmp/redactify-*
+```
+
+### Keeping Configuration
+
+To preserve your configuration for future reinstallation:
+
+```bash
+# Backup configuration before uninstall
+cp ~/redactify/config.yaml ~/redactify-config-backup.yaml
+
+# After reinstallation, restore:
+cp ~/redactify-config-backup.yaml ~/redactify/config.yaml
+```
+
+---
+
 <div align="center">
 
 ## 🎉 Installation Complete
@@ -775,6 +1017,16 @@ open http://localhost:5555
 
 ---
 
-**Need Help?** 📞 [Create an Issue](https://github.com/yourusername/Redactify/issues) | 💬 [Join Discussions](https://github.com/yourusername/Redactify/discussions) | 📖 [Read Docs](docs/)
+**Need Help?** 📞 [Create an Issue](https://github.com/nishikantmandal007/Redactify/issues) | 💬 [Join Discussions](https://github.com/nishikantmandal007/Redactify/discussions) | 📖 [Read Docs](https://github.com/nishikantmandal007/Redactify/blob/main/docs/)
+
+---
+
+### 📚 Related Resources
+
+- [📌 README](https://github.com/nishikantmandal007/Redactify/blob/main/README.md) - Project overview and quick start
+- [🧰 API Documentation](https://github.com/nishikantmandal007/Redactify/blob/main/docs/api.md) - API usage and endpoints
+- [🔧 Configuration Guide](https://github.com/nishikantmandal007/Redactify/blob/main/docs/configuration.md) - Configuration options
+- [⚙️ Architecture](https://github.com/nishikantmandal007/Redactify/blob/main/docs/architecture.md) - System architecture
+- [🐳 Docker Guide](https://github.com/nishikantmandal007/Redactify/blob/main/docker/README.md) - Docker configuration
 
 </div>

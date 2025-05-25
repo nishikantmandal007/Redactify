@@ -905,7 +905,7 @@ Add any other context or screenshots about the feature request here.
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/yourusername/redactify.git
+git clone https://github.com/nishikantmandal007/Redactify.git
 cd redactify
 
 # 2. Set up development environment
