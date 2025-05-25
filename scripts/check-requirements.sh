@@ -217,7 +217,7 @@ provide_recommendations() {
     fi
     
     echo -e "${BLUE}🚀 Ready to install?${NC} Run:"
-    echo "   curl -fsSL https://raw.githubusercontent.com/yourusername/Redactify/main/scripts/quick-install.sh | bash"
+    echo "   curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash"
 }
 
 # Main execution
