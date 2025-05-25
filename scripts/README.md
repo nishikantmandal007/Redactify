@@ -6,21 +6,11 @@ This directory contains automated scripts for installing, managing, and maintain
 
 ### 🔧 Installation Scripts
 
-#### `quick-install.sh` - One-Line Installation (Public Repository)
+#### `quick-install-private.sh` - Private Repository Installation (Recommended)
 
-**For public repositories**
+**The primary installation method for Redactify**
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
-```
-
----
-
-#### `quick-install-private.sh` - Private Repository Installation
-
-**The recommended way to install Redactify from a private repository**
-
-**Option 1: Interactive Helper (Recommended)**
+**Option 1: Interactive Helper (Easiest)**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash
@@ -48,9 +38,30 @@ curl -H "Authorization: token $GITHUB_TOKEN" \
    ```bash
    # Add to your shell profile (~/.bashrc or ~/.zshrc)
    export GITHUB_TOKEN='ghp_your_token_here'
-   
    # Reload your shell
    source ~/.bashrc  # or ~/.zshrc
+   ```
+
+3. **Use the installation helper:**
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash
+   ```
+
+---
+
+#### `quick-install.sh` - Public Repository Installation
+
+**For public repositories (alternative method)**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+```
+
+# Reload your shell
+
+   source ~/.bashrc  # or ~/.zshrc
+
    ```
 
 3. **Use the installation helper:**

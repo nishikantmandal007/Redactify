@@ -120,7 +120,7 @@ graph TB
 
 Redactify provides multiple ways to install depending on your needs:
 
-1. **[Quick One-Line Script](#1️⃣-one-line-quick-installation)**: Fastest way to get started
+1. **[Private Repository Installation](#1️⃣-private-repository-installation-recommended)**: Secure access with GitHub token
 2. **[Docker Containers](#2️⃣-docker-installation)**: Production-ready deployment
 3. **[Manual Installation](#3️⃣-manual-installation)**: Full control and customization
 4. **[GPU Acceleration](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md#-gpu-acceleration-setup)**: High-performance setup
@@ -139,13 +139,25 @@ For comprehensive documentation, see our [Installation Guide](https://github.com
 
 ## 🔧 Installation Options
 
-### 1️⃣ One-Line Quick Installation
+### 1️⃣ Private Repository Installation (Recommended)
 
-> **Best for:** Quick testing & demos - Automatically creates virtual environment
+> **Best for:** Secure private repository access - Automatically creates virtual environment
+
+**Interactive Installation (Easiest):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash
 ```
+
+**Direct Installation (if you have a GitHub token):**
+
+```bash
+export GITHUB_TOKEN='your_personal_access_token'
+curl -H "Authorization: token $GITHUB_TOKEN" \
+  -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install-private.sh | bash
+```
+
+> 📖 **Need help with GitHub tokens?** See our [Private Installation Guide](PRIVATE-INSTALL.md)
 
 This script automatically:
 

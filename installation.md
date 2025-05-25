@@ -16,7 +16,7 @@
 
 | Method | Quick Command | Best For | Estimated Time |
 |--------|--------------|----------|----------------|
-| **One-Line Script** | `curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh \| bash` | Testing, Demo | 5 minutes |
+| **Private Repository (Recommended)** | `curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh \| bash` | All users | 5 minutes |
 | **Docker** | `docker-compose -f docker/docker-compose.yml up -d` | Production | 10 minutes |
 | **Manual** | Step-by-step instructions in [Manual Installation](#-manual-installation) | Development | 15 minutes |
 | **GPU** | Instructions in [GPU Setup](#-gpu-acceleration-setup) | High Performance | 30 minutes |
@@ -27,8 +27,10 @@
 
 - [🎯 Overview](#-overview)
 - [🔄 Installation Methods](#-installation-methods)
-  - [⚡ Quick Start (One-Line Script)](#-quick-start)
+  - [🔒 Private Repository Installation (Recommended)](#-private-repository-installation-recommended)
   - [💻 Manual Installation](#-manual-installation)
+  - [🐳 Docker Installation](#-docker-installation)
+  - [🚀 GPU Acceleration Setup](#-gpu-acceleration-setup)
   - [🐳 Docker Installation](#-docker-installation)
   - [🚀 GPU Acceleration Setup](#-gpu-acceleration-setup)
 - [⚙️ Configuration](#️-configuration)
@@ -74,7 +76,7 @@ Choose the installation method that best suits your needs:
 
 | Method | Best For | Complexity | Setup Time | Isolated Env |
 |--------|----------|------------|------------|--------------|
-| [**One-Line Script**](#-quick-start) | Testing & Demo | ⭐ Easy | 5 minutes | ✅ Virtual Env |
+| [**Private Repository**](#-private-repository-installation-recommended) | All users (Recommended) | ⭐ Easy | 5 minutes | ✅ Virtual Env |
 | [**Manual Setup**](#-manual-installation) | Development | ⭐⭐ Medium | 15 minutes | ✅ Virtual Env |
 | [**Docker**](#-docker-installation) | Production | ⭐⭐ Medium | 10 minutes | ✅ Container |
 | [**GPU Accelerated**](#-gpu-acceleration-setup) | High Performance | ⭐⭐⭐ Advanced | 30 minutes | ✅ Both Options |
@@ -98,27 +100,28 @@ graph TD
     
     E --> K[docker-compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d]
     F --> L[docker-compose -f docker/docker-compose.yml up -d]
-    H --> M[curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash]
+    H --> M[curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash]
     I --> N[Manual steps with GPU packages]
-    J --> O[export REDACTIFY_FORCE_GPU=true && curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash]
+    J --> O[export REDACTIFY_FORCE_GPU=true && curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash]
 ```
 
 ### How to Choose the Right Method
 
-#### 1️⃣ One-Line Installation
+#### 1️⃣ Private Repository Installation
 
-**Best for:** New users, quick testing, demonstrations
+**Best for:** All users (Recommended method)
 
 - ✅ **Pros:**
   - Fastest setup (5 minutes)
   - Handles all dependencies automatically
   - Creates isolated virtual environment
-  - No manual configuration needed
+  - Secure GitHub token authentication
+  - Access to latest private repository features
 - ❌ **Cons:**
-  - Less customization options
+  - Requires GitHub Personal Access Token setup
   - Limited to supported operating systems
-- **Requirements:** Linux/macOS/WSL
-- **Command:** `curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash`
+- **Requirements:** Linux/macOS/WSL, GitHub access
+- **Command:** `curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash`
 
 #### 2️⃣ Manual Installation
 
@@ -169,27 +172,38 @@ graph TD
 
 ---
 
-## ⚡ Quick Start
+## 🔒 Private Repository Installation (Recommended)
 
-> **Perfect for:** Testing Redactify quickly without complex setup. **Automatically creates a virtual environment.**
+> **Perfect for:** All users with secure repository access. **Automatically creates a virtual environment.**
 
-### 🚀 One-Line Installation (Recommended)
+### 🚀 Interactive Installation (Easiest)
 
-**Complete automated setup in an isolated virtual environment:**
+**Complete automated setup with GitHub authentication:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash
 ```
+
+### 🔑 Direct Installation (If you have a token)
+
+**For users who already have a GitHub Personal Access Token:**
+
+```bash
+export GITHUB_TOKEN='your_personal_access_token'
+curl -H "Authorization: token $GITHUB_TOKEN" \
+  -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install-private.sh | bash
+```
+
+**📖 Need help with GitHub tokens?** See our [Private Installation Guide](PRIVATE-INSTALL.md)
 
 **Available Installation Options:**
 
 | Option | Description | How to Use |
 |--------|-------------|------------|
 | **Custom Location** | Install in a specific directory | `export REDACTIFY_INSTALL_DIR="/path/to/custom/location"` before running |
-| **Offline Install** | Install without internet access | Download script first, then run with `./quick-install.sh --offline` |
 | **GPU Only** | Skip CPU-only packages | `export REDACTIFY_FORCE_GPU=true` before running |
 | **Skip Redis** | Use existing Redis server | `export REDACTIFY_SKIP_REDIS=true` before running |
-| **Debug Mode** | Verbose installation output | Run with `bash -x quick-install.sh` |
+| **Debug Mode** | Verbose installation output | Add `--debug` flag or run with `bash -x` |
 
 **What this script does:**
 
