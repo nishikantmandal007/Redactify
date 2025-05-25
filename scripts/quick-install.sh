@@ -4,6 +4,10 @@
 #
 # Usage: curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
 #
+# For Private Repository Access:
+#   export GITHUB_TOKEN='your_personal_access_token'
+#   curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+#
 # This script automatically:
 # - Detects OS and installs system dependencies
 # - Creates a Python virtual environment
@@ -27,6 +31,10 @@ REPO_URL="https://github.com/nishikantmandal007/Redactify.git"
 INSTALL_DIR="$HOME/redactify"
 PYTHON_VERSION="3.10"
 REDIS_VERSION="7"
+
+# Authentication support
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+GITHUB_USER="${GITHUB_USER:-}"
 
 # Functions
 log_info() {
@@ -267,7 +275,31 @@ setup_python_env() {
     
     # Clone repository
     log_info "Cloning Redactify repository..."
-    git clone "$REPO_URL" .
+    
+    # Set up authentication if provided
+    local clone_url="$REPO_URL"
+    if [ -n "$GITHUB_TOKEN" ]; then
+        log_info "Using GitHub token for authentication..."
+        clone_url="https://${GITHUB_TOKEN}@github.com/nishikantmandal007/Redactify.git"
+    elif [ -n "$GITHUB_USER" ]; then
+        log_info "Using GitHub username for authentication..."
+        clone_url="https://${GITHUB_USER}@github.com/nishikantmandal007/Redactify.git"
+    fi
+    
+    # Clone with authentication if needed
+    if ! git clone "$clone_url" .; then
+        log_error "Failed to clone repository. This might be because:"
+        echo "  1. Repository is private and no authentication provided"
+        echo "  2. Invalid GitHub token or credentials"
+        echo "  3. Network connectivity issues"
+        echo ""
+        echo "For private repositories, set environment variables:"
+        echo "  export GITHUB_TOKEN='your_personal_access_token'"
+        echo "  export GITHUB_USER='your_username'"
+        echo ""
+        echo "Then run: curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash"
+        exit 1
+    fi
     
     # Create virtual environment
     log_info "Creating Python virtual environment..."

@@ -6,23 +6,58 @@ This directory contains automated scripts for installing, managing, and maintain
 
 ### 🔧 Installation Scripts
 
-#### `quick-install.sh` - One-Line Installation
+#### `quick-install.sh` - One-Line Installation (Public Repository)
 
-**The recommended way to install Redactify**
+**For public repositories**
 
 ```bash
-curl -fsSL htt- ✅ Provides next steps for deployment
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+```
 
 ---
 
-## 🎉 Final Words
+#### `quick-install-private.sh` - Private Repository Installation
 
-**Happy Redacting! 🔒📄**
+**The recommended way to install Redactify from a private repository**
 
-Your documents are now secure with Redactify - Secure • Automated • Intelligent
+**Option 1: Interactive Helper (Recommended)**
 
-</div>githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install.sh | bash
+```bash
+curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash
 ```
+
+**Option 2: Direct Installation (if you have a token)**
+
+```bash
+export GITHUB_TOKEN='your_personal_access_token'
+curl -H "Authorization: token $GITHUB_TOKEN" \
+  -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/quick-install-private.sh | bash
+```
+
+**Setting up GitHub Authentication:**
+
+1. **Create Personal Access Token:**
+   - Go to [GitHub Settings → Tokens](https://github.com/settings/tokens)
+   - Click "Generate new token (classic)"
+   - Give it a name (e.g., "Redactify Installation")
+   - Select scopes: `repo` (for private repositories)
+   - Copy the generated token
+
+2. **Save the token (recommended):**
+
+   ```bash
+   # Add to your shell profile (~/.bashrc or ~/.zshrc)
+   export GITHUB_TOKEN='ghp_your_token_here'
+   
+   # Reload your shell
+   source ~/.bashrc  # or ~/.zshrc
+   ```
+
+3. **Use the installation helper:**
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/nishikantmandal007/Redactify/main/scripts/install-helper.sh | bash
+   ```
 
 **What it does:**
 

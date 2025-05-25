@@ -170,7 +170,7 @@ validate_requirements() {
 validate_scripts() {
     log_info "Validating other scripts..."
     
-    local scripts=("check-requirements.sh" "uninstall.sh" "status.sh")
+    local scripts=("check-requirements.sh" "uninstall.sh" "status.sh" "quick-install-private.sh" "install-helper.sh")
     
     for script in "${scripts[@]}"; do
         if [ -f "./$script" ]; then
@@ -183,6 +183,23 @@ validate_scripts() {
             log_error "❌ Script '$script' not found"
         fi
     done
+    
+    # Validate private repository scripts specifically
+    if [ -f "./quick-install-private.sh" ]; then
+        if grep -q "GITHUB_TOKEN" "./quick-install-private.sh"; then
+            log_success "✅ Private installation script has GitHub token authentication"
+        else
+            log_error "❌ Private installation script missing GitHub token authentication"
+        fi
+    fi
+    
+    if [ -f "./install-helper.sh" ]; then
+        if grep -q "Personal Access Token" "./install-helper.sh"; then
+            log_success "✅ Installation helper has token setup instructions"
+        else
+            log_error "❌ Installation helper missing token setup instructions"
+        fi
+    fi
 }
 
 check_git_status() {
