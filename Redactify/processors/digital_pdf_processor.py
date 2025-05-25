@@ -13,7 +13,7 @@ from ..recognizers.entity_types import QR_CODE_ENTITY
 from ..utils.gpu_utils import GPUResourceManager
 from ..core.config import TEMP_DIR # Import TEMP_DIR from config
 
-def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None, confidence_threshold=0.6, barcode_types_to_redact=None, task_context=None):
+def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None, confidence_threshold=0.6, barcode_types_to_redact=None, task_context=None, enable_visual_debug=False):
     """
     Process a digital (text-based) PDF file and redact PII.
     Optimized with batched processing and parallel execution where possible.
@@ -27,6 +27,7 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
         confidence_threshold: Minimum confidence score to consider a match
         barcode_types_to_redact: List of barcode types to redact (if barcodes requested)
         task_context: Optional Celery task context for progress updates
+        enable_visual_debug: Enable visual debugging (default: False)
         
     Returns:
         Tuple[str, Set[str]]: Path to the redacted PDF file and a set of redacted entity types.

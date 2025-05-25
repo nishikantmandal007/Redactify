@@ -843,6 +843,11 @@ class GPUResourceManager:
             cls._instance = GPUResourceManager()
         return cls._instance
     
+    @classmethod
+    def is_gpu_available(cls):
+        """Class method to check if GPU is available - delegates to global function"""
+        return is_gpu_available()
+    
     def __init__(self):
         """Initialize GPU resource manager and detect capabilities"""
         if GPUResourceManager._instance is not None:

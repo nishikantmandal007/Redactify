@@ -341,12 +341,13 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
     
     # Constants for optimization - adjusted based on reduced_quality flag and GPU availability
     # Use more workers when GPU is available and not in reduced_quality mode
-    MAX_WORKERS = 1 if reduced_quality else min(max(os.cpu_count() or 2 - 1, 1), 3 if GPUResourceManager.is_gpu_available() else 2)
+    gpu_manager = GPUResourceManager.get_instance()
+    MAX_WORKERS = 1 if reduced_quality else min(max(os.cpu_count() or 2 - 1, 1), 3 if gpu_manager.is_available() else 2)
     BATCH_SIZE = 1  # Always process 1 page at a time for better stability
     OCR_TIMEOUT = 45 if reduced_quality else 60  # Reduced timeout for low memory situations
     
     # Log acceleration status
-    gpu_status = "GPU acceleration enabled" if GPUResourceManager.is_gpu_available() else "CPU mode"
+    gpu_status = "GPU acceleration enabled" if gpu_manager.is_available() else "CPU mode"
     logging.info(f"Processing scanned PDF: {pdf_path} ({gpu_status})")
     
     # Check if QR code redaction is requested
@@ -725,7 +726,8 @@ def redact_scanned_pdf(pdf_path, analyzer, ocr, pii_types_selected, custom_rules
         gc.collect()
         
         # Log GPU status in output message
-        accel_status = "with GPU acceleration" if GPUResourceManager.is_gpu_available() else "using CPU"
+        gpu_manager = GPUResourceManager.get_instance()
+        accel_status = "with GPU acceleration" if gpu_manager.is_available() else "using CPU"
         logging.info(f"Redacted scanned PDF {accel_status} saved to {output_pdf_path} with {total_redactions} text & {total_barcode_redactions} barcode redactions")
         
         if task_context:

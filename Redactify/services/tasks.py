@@ -210,39 +210,39 @@ def perform_redaction(self, file_path, pii_types_selected, custom_rules, enable_
             'metadata_stats': metadata_stats  # Include metadata statistics
         }
 
-    except fitz.PyMuPDFError as fz_error:
+    except Exception as fz_error:
         # Handle PyMuPDF specific errors
-        logging.error(f"Task {task_id}: PyMuPDF processing error for {filename_for_log}: {fz_error.message} (rc={fz_error.rc})", exc_info=True)
-        
-        # Clean up any temporary files created during processing
-        if redacted_file_path and os.path.exists(redacted_file_path):
-            try:
-                os.remove(redacted_file_path)
-                logging.info(f"Task {task_id}: Cleaned up partially redacted file after PyMuPDFError: {redacted_file_path}")
-            except OSError as cleanup_err:
-                logging.error(f"Task {task_id}: Failed to clean up partial file {redacted_file_path} after PyMuPDFError: {cleanup_err}")
+        if isinstance(fz_error, (fitz.FileDataError, fitz.FileNotFoundError, fitz.EmptyFileError)):
+            logging.error(f"Task {task_id}: PyMuPDF processing error for {filename_for_log}: {str(fz_error)}", exc_info=True)
+            
+            # Clean up any temporary files created during processing
+            if redacted_file_path and os.path.exists(redacted_file_path):
+                try:
+                    os.remove(redacted_file_path)
+                    logging.info(f"Task {task_id}: Cleaned up partially redacted file after PyMuPDFError: {redacted_file_path}")
+                except OSError as cleanup_err:
+                    logging.error(f"Task {task_id}: Failed to clean up partial file {redacted_file_path} after PyMuPDFError: {cleanup_err}")
 
-        will_retry_pdf = fz_error.rc == fitz.FZ_ERROR_TRYLATER
-        
-        if not original_file_deleted and os.path.exists(file_path) and not will_retry_pdf:
-            try:
-                os.remove(file_path)
-                logging.info(f"Task {task_id}: Cleaned up original file after PyMuPDFError: {file_path}")
-            except OSError as del_err:
-                logging.error(f"Task {task_id}: Could not delete original file {file_path} after PyMuPDFError: {del_err}")
+            # For PyMuPDF errors, generally don't retry
+            will_retry_pdf = False
+            
+            if not original_file_deleted and os.path.exists(file_path) and not will_retry_pdf:
+                try:
+                    os.remove(file_path)
+                    logging.info(f"Task {task_id}: Cleaned up original file after PyMuPDFError: {file_path}")
+                except OSError as del_err:
+                    logging.error(f"Task {task_id}: Could not delete original file {file_path} after PyMuPDFError: {del_err}")
 
-        self.update_state(state='FAILURE', meta={
-            'exc_type': type(fz_error).__name__,
-            'exc_message': str(fz_error),
-            'status': f'Redaction process failed due to PyMuPDF error: {fz_error.message}'
-        })
+            self.update_state(state='FAILURE', meta={
+                'exc_type': type(fz_error).__name__,
+                'exc_message': str(fz_error),
+                'status': f'Redaction process failed due to PyMuPDF error: {str(fz_error)}'
+            })
 
-        if will_retry_pdf:
-            logging.info(f"Task {task_id}: PyMuPDF error is FZ_ERROR_TRYLATER, attempting retry.")
-            retry_countdown = RETRY_KWARGS.get('countdown', lambda n: 5 * (2**n))(self.request.retries)
-            return self.retry(exc=fz_error, countdown=retry_countdown)
-        
-        raise self.reraise() if hasattr(self, 'reraise') else fz_error
+            raise fz_error
+        else:
+            # Re-raise non-PyMuPDF exceptions
+            raise
 
     # Consider adding specific OCR error handling here if known
     # except SpecificOCRError as ocr_error:

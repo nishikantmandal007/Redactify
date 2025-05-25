@@ -117,3 +117,6 @@ desktop.ini
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+# Ignore Jekyll documentation site and all its contents
+docs-site/
