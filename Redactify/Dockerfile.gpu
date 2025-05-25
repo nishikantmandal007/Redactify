@@ -52,6 +52,9 @@ COPY Redactify/requirements_gpu.txt /app/requirements_gpu.txt
 # Using --no-cache-dir to reduce image size.
 RUN pip install --no-cache-dir -r /app/requirements_gpu.txt
 
+# Install spaCy models explicitly
+RUN python -m spacy download en_core_web_trf
+
 # 6. Copy Application Code
 # This copies the entire build context (expected to be the project root) into the /app directory in the image.
 # As a result, the 'Redactify' application directory from the host will be at /app/Redactify/ within the container.

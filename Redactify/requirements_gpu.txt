@@ -32,7 +32,7 @@ layoutparser>=0.3.4  # For document layout analysis
 presidio-analyzer>=2.2.0  # Microsoft's PII detection library
 presidio-anonymizer>=2.2.0
 spacy>=3.2.0  # Required by Presidio for NLP
-tensorflow-gpu==2.12.0 # Check compatibility with Spacy 3.2 and CUDA 11.x
+tensorflow==2.12.0  # This version works with Python 3.11
 pytesseract>=0.3.8  # Optional OCR engine
 
 # Web Interface

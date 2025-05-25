@@ -24,7 +24,8 @@ RUN apt-get update && \
     libxrender1 \
     libxext6 \
     curl \
-    gnupg && \
+    gnupg \
+    libzbar0 && \
     # Clean up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -40,6 +41,9 @@ COPY Redactify/requirements.txt /app/requirements.txt
 # Install Python dependencies from requirements.txt
 # Using --no-cache-dir to reduce image size
 RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Install spaCy models explicitly
+RUN python -m spacy download en_core_web_trf
 
 # 6. Copy Application Code
 # This copies the entire build context (project root) into the /app directory in the image.

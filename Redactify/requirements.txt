@@ -1,7 +1,6 @@
-# This file lists dependencies for running Redactify in CPU mode.
+# Redactify - PDF PII Redaction Tool Requirements (CPU Mode)
 # For GPU support, see requirements_gpu.txt.
 
-# Redactify - PDF PII Redaction Tool Requirements
 # Core Dependencies
 Flask>=2.0.0
 PyMuPDF>=1.18.0  # For PDF processing
@@ -13,9 +12,6 @@ fastapi>=0.104.0  # FastAPI framework
 uvicorn>=0.23.2  # ASGI server for FastAPI
 python-multipart>=0.0.6  # For file uploads in FastAPI
 
-# Frontend Dependencies
-Node.js>=18.0.0  # Will be installed separately, not via pip
-
 # PDF Processing
 pdf2image>=1.16.0  # For converting PDF pages to images
 pyzbar>=0.1.8  # For QR code detection
@@ -25,17 +21,18 @@ Pillow>=9.0.0  # Python Imaging Library
 opencv-python>=4.5.0  # Computer Vision library
 paddleocr>=2.5.0  # OCR engine for text detection (pulls paddlepaddle CPU by default)
 layoutparser>=0.3.4  # For document layout analysis
+pytesseract>=0.3.8  # OCR engine
 
 # PII Detection
 presidio-analyzer>=2.2.0  # Microsoft's PII detection library
 presidio-anonymizer>=2.2.0
-spacy>=3.2.0  # Required by Presidio for NLP (may pull tensorflow CPU if needed)
-pytesseract>=0.3.8  # Optional OCR engine
+spacy>=3.2.0  # Required by Presidio for NLP
 
 # Web Interface
 Flask-Bootstrap>=3.3.7  # Bootstrap integration for Flask
 Flask-WTF>=1.0.0  # Form handling for Flask
 Flask-Session>=0.4.0  # Server-side session management
+Werkzeug>=2.0.0  # WSGI utilities (required by Flask)
 
 # Utilities
 PyYAML>=6.0  # YAML parsing for configuration files
@@ -63,4 +60,12 @@ black>=22.0.0  # Code formatting
 numpy>=1.21.0  # Numerical computing
 scipy>=1.8.0  # Scientific computing
 matplotlib>=3.5.0  # Data visualization
-en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.2.0/en_core_web_lg-3.2.0.tar.gz  # SpaCy model
+
+# TensorFlow with built-in GPU support
+# Starting with TensorFlow 2.13+, GPU and CPU are combined in a single package
+# Using a version known to work with Python 3.11
+tensorflow==2.19.0  # This version works with Python 3.11
+
+# SpaCy - we'll install models separately in Dockerfile
+# We don't directly specify model URLs here as they can cause Docker build issues
+# Models will be installed with: python -m spacy download en_core_web_lg

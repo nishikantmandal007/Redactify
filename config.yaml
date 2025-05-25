@@ -39,7 +39,10 @@ ocr_confidence_threshold: 0.1 # Lower threshold means more text will be detected
 presidio_confidence_threshold: 0.05 # Lowered for better detection of names (especially all caps)
 
 # Service URLs
-redis_url: redis://localhost:6379/0 # Redis connection for Celery tasks
+# For local development:
+# redis_url: redis://localhost:6379/0
+# For Docker:
+redis_url: redis://redis:6379/0 # Redis connection for Celery tasks
 
 # ====================================================================
 # TASK PROCESSING CONFIGURATION
@@ -51,9 +54,9 @@ celery_task_hard_time_limit: 660 # 11 minutes - forceful termination
 # ====================================================================
 # WEB SERVER CONFIGURATION
 # ====================================================================
-# Uncomment and customize as needed
-# host: 0.0.0.0  # Default: 127.0.0.1 (localhost only)
-# port: 8080     # Default: 5000
+# Web server settings - Docker needs host 0.0.0.0 to access from outside container
+host: 0.0.0.0 # Listen on all interfaces (required for Docker)
+port: 5000
 
 # ====================================================================
 # LOGGING CONFIGURATION
