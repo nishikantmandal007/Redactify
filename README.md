@@ -176,22 +176,101 @@ This script automatically:
 
 > **Best for:** Production environments & containerized deployment
 
+#### Quick Start with Docker
+
 ```bash
 # Clone repository
 git clone https://github.com/nishikantmandal007/Redactify.git
 cd Redactify
 
+# Build the Docker image (CPU version)
+docker build -f Redactify/Dockerfile -t redactify-cpu .
+
 # Launch using Docker Compose
 docker-compose -f docker/docker-compose.yml up -d
+
+# Alternatively, use our helper script for easier management:
+./scripts/redactify.sh run
 ```
 
 **Access at:** <http://localhost:5000>
 
-**Additional Docker Options:**
+#### Docker Setup Components
 
+The Redactify Docker setup includes three main services:
+
+1. **Redis** - Message broker and result backend for Celery
+2. **Web** - Flask web application (accessible on port 5000)
+3. **Celery Worker** - Background processing service
+
+#### System Requirements for Docker
+
+- Docker Engine (version 20.10.0 or later)
+- Docker Compose (version 2.0.0 or later)
+- At least 16GB RAM recommended
+- At least 20GB free disk space
+
+The Docker image size (~14GB) includes:
+
+- spaCy model (9.45GB)
+- Python dependencies (3.33GB)
+- System dependencies (822MB)
+
+#### Comprehensive Docker Options
+
+- **Build CPU image:** `docker build -f Redactify/Dockerfile -t redactify-cpu .`
+- **Build GPU image:** `docker build -f Redactify/Dockerfile.gpu -t redactify-gpu .`
 - **Production setup:** `docker-compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d`
 - **GPU support:** `docker-compose -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d`
-- **Scaling workers:** `docker-compose -f docker/docker-compose.yml up -d --scale worker=4`
+- **Scaling workers:** `docker-compose -f docker/docker-compose.yml up -d --scale celery_worker=4`
+- **Start in detached mode:** `docker-compose -f docker/docker-compose.yml up -d`
+- **View logs:** `docker-compose -f docker/docker-compose.yml logs -f`
+- **Stop containers:** `docker-compose -f docker/docker-compose.yml down`
+
+#### Using the Docker Helper Script
+
+Our helper script provides convenient commands for Docker operations:
+
+```bash
+# Build the Docker image (CPU version)
+./scripts/redactify.sh build
+
+# Build the Docker image (GPU version)
+./scripts/redactify.sh build-gpu
+
+# Run the application with all services
+./scripts/redactify.sh run
+
+# Run in detached mode (background)
+./scripts/redactify.sh run-detached
+
+# Stop all services
+./scripts/redactify.sh stop
+
+# View logs
+./scripts/redactify.sh logs
+
+# Check status of containers
+./scripts/redactify.sh status
+
+# Clean up Docker resources
+./scripts/redactify.sh clean
+```
+
+#### Custom Configuration
+
+Create a `config.yaml` file in the project root for custom settings:
+
+```yaml
+# Example config.yaml
+redis_url: "redis://redis:6379/0"
+max_file_size_mb: 50
+ocr_confidence_threshold: 0.7
+presidio_confidence_threshold: 0.35
+log_level: "INFO"
+```
+
+For detailed Docker setup instructions and troubleshooting, see our [Docker Setup Guide](DOCKER_SETUP.md) and [Production Deployment Guide](PRODUCTION_DEPLOYMENT.md).
 
 ### 3️⃣ Manual Installation
 
@@ -462,7 +541,7 @@ redis_url: redis://localhost:6379/0
 | Resource | Description | Link |
 |----------|-------------|------|
 | **Installation Guide** | Comprehensive setup instructions | [installation.md](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md) |
-| **Docker Guide** | Container deployment options | [docker/README.md](https://github.com/nishikantmandal007/Redactify/blob/main/docker/README.md) |
+| **Docker Guide** | Container deployment options | [DOCKER_SETUP.md](https://github.com/nishikantmandal007/Redactify/blob/main/DOCKER_SETUP.md) |
 | **API Documentation** | REST API reference | [docs/api.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/api.md) |
 | **Configuration** | Configuration options | [docs/configuration.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/configuration.md) |
 | **Architecture** | System design | [docs/architecture.md](https://github.com/nishikantmandal007/Redactify/blob/main/docs/architecture.md) |
@@ -473,10 +552,12 @@ redis_url: redis://localhost:6379/0
 
 | Installation Method | Documentation Link | Best For |
 |--------------------|---------------------|----------|
-| **One-Line Script** | [Quick Start](#1️⃣-one-line-quick-installation) | Quick testing, demos |
+| **One-Line Script** | [Private Repository Installation](#1️⃣-private-repository-installation-recommended) | Quick testing, demos |
 | **Docker** | [Docker Installation](#2️⃣-docker-installation) | Production, team environments |
 | **Manual Setup** | [Manual Installation](#3️⃣-manual-installation) | Development, customization |
-| **GPU Acceleration** | [GPU Setup](https://github.com/nishikantmandal007/Redactify/blob/main/installation.md#-gpu-acceleration-setup) | High-volume processing |
+| **Docker Detailed** | [Docker Setup Guide](DOCKER_SETUP.md) | Production deployments |
+| **Production** | [Production Deployment Guide](PRODUCTION_DEPLOYMENT.md) | Enterprise environments |
+| **Troubleshooting** | [Docker Troubleshooting](TROUBLESHOOTING.md) | Resolving issues |
 
 ### 📖 Documentation Website
 
