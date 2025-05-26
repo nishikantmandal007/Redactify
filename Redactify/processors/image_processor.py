@@ -297,7 +297,7 @@ def process_image(image_path, pii_types_selected, custom_rules=None,
 
 def redact_Image(image_path, analyzer, ocr, pii_types_selected, custom_rules=None, 
                 confidence_threshold=0.6, ocr_confidence_threshold=0.8, temp_dir=None,
-                barcode_types_to_redact=None, reduced_quality=False, task_context=None) -> Tuple[str, Set[str]]:
+                barcode_types_to_redact=None, reduced_quality=False, task_context=None, enable_visual_debug=False) -> Tuple[str, Set[str]]:
     """
     Process an image to redact PII.
     

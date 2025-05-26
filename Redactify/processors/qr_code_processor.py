@@ -35,7 +35,7 @@ def get_supported_barcode_types():
     """
     return BARCODE_TYPES.copy()
 
-def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None):
+def detect_and_redact_qr_codes(image_array, barcode_types_to_redact=None, enable_visual_debug=False):
     """
     Detects and redacts specified barcode types in an image using text labels.
     Uses the centralized text label processor for consistent label generation.
