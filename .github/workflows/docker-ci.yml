@@ -48,7 +48,7 @@ jobs:
         id: meta-web
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/nishikantmandal007/redactify/${{ env.IMAGE_NAME_WEB }}
+          images: ${{ env.REGISTRY }}/nishikantmandal007/redactify
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -70,7 +70,7 @@ jobs:
         id: meta-celery
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/nishikantmandal007/redactify/${{ env.IMAGE_NAME_CELERY }}
+          images: ${{ env.REGISTRY }}/nishikantmandal007/redactify-celery
           tags: |
             type=ref,event=branch
             type=ref,event=pr
