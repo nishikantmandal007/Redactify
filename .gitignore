@@ -120,3 +120,10 @@ celerybeat.pid
 
 # Ignore Jekyll documentation site and all its contents
 docs-site/
+
+# Data and upload directories
+docker/data/
+docker/data/uploads/
+docker/data/temp_files/
+**/data/uploads/
+**/data/temp_files/

@@ -30,12 +30,12 @@ services:
       # Mounts your custom config.yaml from project root into the container.
       - ../config.yaml:/app/config.yaml
       # Example for persistent upload/temp storage (optional, uncomment and adjust host path)
-      # - ./data/uploads:/app/upload_files 
-      # - ./data/temp_files:/app/temp_files
+      - ./data/uploads:/app/upload_files 
+      - ./data/temp_files:/app/temp_files
     depends_on:
       - redis
     environment:
-      - REDIS_URL=redis://redis:6379/0 # Connect to the 'redis' service on this Docker network
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0 # Connect to the 'redis' service on this Docker network
       - FLASK_ENV=production # Set by Dockerfile, confirmed here
       # - FLASK_APP=Redactify.app # Already set in Dockerfile
       # Add any other necessary environment variables:
@@ -55,12 +55,12 @@ services:
     volumes:
       - ../Redactify:/app/Redactify
       - ../config.yaml:/app/config.yaml
-      # - ./data/uploads:/app/upload_files # Ensure consistency with web service if using host paths
-      # - ./data/temp_files:/app/temp_files
+      - ./data/uploads:/app/upload_files # Ensure consistency with web service if using host paths
+      - ./data/temp_files:/app/temp_files
     depends_on:
       - redis
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDACTIFY_REDIS_URL=redis://redis:6379/0
       - FLASK_ENV=production
       # - C_FORCE_ROOT=true # If Celery needs to run as root (avoid in production if possible)
     restart: unless-stopped
