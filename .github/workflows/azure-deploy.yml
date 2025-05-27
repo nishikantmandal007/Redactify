@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_RESOURCE_GROUP: redactify-rg
+  AZURE_RESOURCE_GROUP: RedactifyResourceGroup
   AZURE_LOCATION: eastus
   AZURE_CONTAINER_APP_ENV: redactify-env
   REGISTRY: ghcr.io
@@ -59,39 +59,57 @@ jobs:
 
       - name: Deploy Web Container App
         run: |
-          az containerapp create \
+          # Try to update first, if it fails, create new
+          if ! az containerapp update \
             --name redactify-web-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
             --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-web-cpu:latest \
-            --target-port 5000 \
-            --ingress external \
-            --min-replicas 1 \
-            --max-replicas 3 \
-            --cpu 1.0 \
-            --memory 2Gi \
-            --registry-server ${{ env.REGISTRY }} \
-            --registry-username ${{ github.actor }} \
-            --registry-password ${{ secrets.GITHUB_TOKEN }} \
-            --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production
+            --set-env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production; then
+            echo "Container app doesn't exist, creating new one..."
+            az containerapp create \
+              --name redactify-web-cpu \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
+              --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-web-cpu:latest \
+              --target-port 5000 \
+              --ingress external \
+              --min-replicas 1 \
+              --max-replicas 3 \
+              --cpu 1.0 \
+              --memory 2Gi \
+              --registry-server ${{ env.REGISTRY }} \
+              --registry-username ${{ github.actor }} \
+              --registry-password ${{ secrets.GITHUB_TOKEN }} \
+              --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production
+          fi
 
       - name: Deploy Celery Worker Container App
         run: |
-          az containerapp create \
+          # Try to update first, if it fails, create new
+          if ! az containerapp update \
             --name redactify-celery-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
             --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-celery-cpu:latest \
-            --min-replicas 1 \
-            --max-replicas 2 \
-            --cpu 1.0 \
-            --memory 2Gi \
-            --registry-server ${{ env.REGISTRY }} \
-            --registry-username ${{ github.actor }} \
-            --registry-password ${{ secrets.GITHUB_TOKEN }} \
-            --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
+            --set-env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
             --command "celery" \
-            --args "-A Redactify.services.celery_service.celery worker --loglevel=info -Q redaction --concurrency=2 -E"
+            --args "-A Redactify.services.celery_service.celery worker --loglevel=info -Q redaction --concurrency=2 -E"; then
+            echo "Container app doesn't exist, creating new one..."
+            az containerapp create \
+              --name redactify-celery-cpu \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
+              --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-celery-cpu:latest \
+              --min-replicas 1 \
+              --max-replicas 2 \
+              --cpu 1.0 \
+              --memory 2Gi \
+              --registry-server ${{ env.REGISTRY }} \
+              --registry-username ${{ github.actor }} \
+              --registry-password ${{ secrets.GITHUB_TOKEN }} \
+              --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
+              --command "celery" \
+              --args "-A Redactify.services.celery_service.celery worker --loglevel=info -Q redaction --concurrency=2 -E"
+          fi
 
       - name: Get Web App URL
         run: |
