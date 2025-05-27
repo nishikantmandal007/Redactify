@@ -6,6 +6,7 @@
 - [x] GitHub Actions CI/CD workflows
 - [x] Azure service principal created
 - [x] Code pushed to GitHub repository
+- [x] Azure resource providers registered (Microsoft.OperationalInsights, Microsoft.App, Microsoft.Cache)
 
 ## 🔄 Next Steps (Manual Actions Required)
 
