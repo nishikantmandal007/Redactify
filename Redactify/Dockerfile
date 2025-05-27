@@ -1,7 +1,7 @@
 # Dockerfile for Redactify - CPU-Only Deployment (Multi-stage optimized)
 
 # 1. Base Image for Building
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Set Working Directory
 WORKDIR /app
@@ -22,7 +22,7 @@ RUN apt-get update && \
 COPY Redactify/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir --user -r /app/requirements.txt && \
-    python -m spacy download en_core_web_sm --user
+    python -m spacy download en_core_web_lg --user
 
 # 2. Production Image
 FROM python:3.11-slim

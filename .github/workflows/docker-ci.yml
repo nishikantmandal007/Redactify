@@ -12,8 +12,8 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: nishikantmandal007 # Replace with your GitHub username
-  IMAGE_NAME_WEB: redactify-web
-  IMAGE_NAME_CELERY: redactify-celery
+  IMAGE_NAME_WEB: redactify-web-cpu
+  IMAGE_NAME_CELERY: redactify-celery-cpu
 
 jobs:
   build:

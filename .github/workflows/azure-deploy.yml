@@ -60,7 +60,7 @@ jobs:
       - name: Create image pull secret for GHCR
         run: |
           az containerapp registry set \
-            --name redactify-web \
+            --name redactify-web-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --server ${{ env.REGISTRY }} \
             --username ${{ secrets.GHCR_USERNAME }} \
@@ -69,7 +69,7 @@ jobs:
       - name: Deploy Web Container App
         run: |
           az containerapp create \
-            --name redactify-web \
+            --name redactify-web-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
             --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-web:latest \
@@ -87,10 +87,10 @@ jobs:
       - name: Deploy Celery Worker Container App
         run: |
           az containerapp create \
-            --name redactify-celery \
+            --name redactify-celery-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-celery:latest \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-celery-cpu:latest \
             --min-replicas 1 \
             --max-replicas 2 \
             --cpu 1.0 \
