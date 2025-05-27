@@ -91,7 +91,7 @@ jobs:
             --registry-password ${{ secrets.GITHUB_TOKEN }} \
             --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
             --command "celery" \
-            --args "-A,Redactify.services.celery_service.celery,worker,--loglevel=info,-Q,redaction,--concurrency=2,-E"
+            --args "-A" "Redactify.services.celery_service.celery" "worker" "--loglevel=info" "-Q" "redaction" "--concurrency=2" "-E"
 
       - name: Get Web App URL
         run: |
