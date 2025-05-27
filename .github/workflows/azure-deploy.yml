@@ -1,3 +1,5 @@
+### .github/workflows/azure-deploy.yml ###
+
 name: Deploy to Azure
 
 on:
@@ -12,6 +14,7 @@ env:
   AZURE_LOCATION: eastus
   AZURE_CONTAINER_APP_ENV: redactify-env
   REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: nishikantmandal007 # Replace with your GitHub username
 
 jobs:
   deploy:
@@ -26,10 +29,6 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Log in to GitHub Container Registry from Azure
-        run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
 
       - name: Create Resource Group
         run: |
@@ -56,7 +55,16 @@ jobs:
         run: |
           REDIS_KEY=$(az redis list-keys --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query primaryKey -o tsv)
           REDIS_HOST=$(az redis show --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query hostName -o tsv)
-          echo "connection_string=rediss://:$REDIS_KEY@$REDIS_HOST:6380/0" >> $GITHUB_OUTPUT
+          echo "connection_string=redis://:$REDIS_KEY@$REDIS_HOST:6380/0" >> $GITHUB_OUTPUT
+
+      - name: Create image pull secret for GHCR
+        run: |
+          az containerapp registry set \
+            --name redactify-web \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --server ${{ env.REGISTRY }} \
+            --username ${{ secrets.GHCR_USERNAME }} \
+            --password ${{ secrets.GHCR_TOKEN }}
 
       - name: Deploy Web Container App
         run: |
@@ -64,14 +72,14 @@ jobs:
             --name redactify-web \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-web:latest \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-web:latest \
             --target-port 5000 \
             --ingress external \
             --min-replicas 1 \
             --max-replicas 3 \
             --cpu 1.0 \
             --memory 2Gi \
-            --registry-server ghcr.io \
+            --registry-server ${{ env.REGISTRY }} \
             --registry-username ${{ secrets.GHCR_USERNAME }} \
             --registry-password ${{ secrets.GHCR_TOKEN }} \
             --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production
@@ -82,12 +90,12 @@ jobs:
             --name redactify-celery \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-celery:latest \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-celery:latest \
             --min-replicas 1 \
             --max-replicas 2 \
             --cpu 1.0 \
             --memory 2Gi \
-            --registry-server ghcr.io \
+            --registry-server ${{ env.REGISTRY }} \
             --registry-username ${{ secrets.GHCR_USERNAME }} \
             --registry-password ${{ secrets.GHCR_TOKEN }} \
             --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
@@ -97,4 +105,4 @@ jobs:
       - name: Get Web App URL
         run: |
           FQDN=$(az containerapp show --name redactify-web --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv)
-          echo "\n🚀 Application deployed at: https://$FQDN"
+          echo "\uD83D\uDE80 Application deployed at: https://$FQDN"

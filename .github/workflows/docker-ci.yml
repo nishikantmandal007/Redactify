@@ -1,3 +1,5 @@
+### .github/workflows/docker-ci.yml ###
+
 name: Build and Push Docker Images
 
 on:
@@ -9,6 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: nishikantmandal007 # Replace with your GitHub username
   IMAGE_NAME_WEB: redactify-web
   IMAGE_NAME_CELERY: redactify-celery
 
@@ -41,14 +44,14 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Extract metadata for web image
         id: meta-web
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/nishikantmandal007/${{ env.IMAGE_NAME_WEB }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME_WEB }}
           tags: |
             type=raw,value=latest
 
@@ -65,7 +68,7 @@ jobs:
         id: meta-celery
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/nishikantmandal007/${{ env.IMAGE_NAME_CELERY }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME_CELERY }}
           tags: |
             type=raw,value=latest
 
