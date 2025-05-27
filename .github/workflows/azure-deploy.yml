@@ -5,7 +5,7 @@ on:
     workflows: ["Build and Push Docker Images"]
     branches: [main]
     types: [completed]
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 env:
   AZURE_RESOURCE_GROUP: redactify-rg
@@ -26,6 +26,10 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to GitHub Container Registry from Azure
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
 
       - name: Create Resource Group
         run: |
@@ -52,11 +56,7 @@ jobs:
         run: |
           REDIS_KEY=$(az redis list-keys --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query primaryKey -o tsv)
           REDIS_HOST=$(az redis show --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query hostName -o tsv)
-          echo "connection_string=redis://:$REDIS_KEY@$REDIS_HOST:6380/0" >> $GITHUB_OUTPUT
-
-      - name: Authenticate with GHCR
-        run: |
-          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+          echo "connection_string=rediss://:$REDIS_KEY@$REDIS_HOST:6380/0" >> $GITHUB_OUTPUT
 
       - name: Deploy Web Container App
         run: |
@@ -97,4 +97,4 @@ jobs:
       - name: Get Web App URL
         run: |
           FQDN=$(az containerapp show --name redactify-web --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv)
-          echo "🚀 Application deployed at: https://$FQDN"
+          echo "\n🚀 Application deployed at: https://$FQDN"

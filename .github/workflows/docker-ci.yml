@@ -1,95 +1,79 @@
-name: Build and Deploy to Azure Container Apps
-# This workflow builds and deploys the Redactify application to Azure Container Apps
+name: Build and Push Docker Images
 
 on:
-  workflow_run:
-    workflows: ["Build and Push Docker Images"]
+  push:
     branches: [main]
-    types: [completed]
-  workflow_dispatch: # Allow manual trigger
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 env:
-  AZURE_RESOURCE_GROUP: redactify-rg
-  AZURE_LOCATION: eastus
-  AZURE_CONTAINER_APP_ENV: redactify-env
   REGISTRY: ghcr.io
+  IMAGE_NAME_WEB: redactify-web
+  IMAGE_NAME_CELERY: redactify-celery
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v1
+      - name: Free disk space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
-      - name: Authenticate to GHCR
-        run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Create Resource Group
-        run: |
-          az group create --name ${{ env.AZURE_RESOURCE_GROUP }} --location ${{ env.AZURE_LOCATION }}
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Container Apps Environment
-        run: |
-          az containerapp env create \
-            --name ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --location ${{ env.AZURE_LOCATION }}
+      - name: Extract metadata for web image
+        id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/nishikantmandal007/${{ env.IMAGE_NAME_WEB }}
+          tags: |
+            type=raw,value=latest
 
-      - name: Create Azure Cache for Redis
-        run: |
-          az redis create \
-            --name redactify-redis \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --location ${{ env.AZURE_LOCATION }} \
-            --sku Basic \
-            --vm-size c0
+      - name: Build and push web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Redactify/Dockerfile
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
 
-      - name: Get Redis Connection String
-        id: redis
-        run: |
-          REDIS_KEY=$(az redis list-keys --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query primaryKey -o tsv)
-          REDIS_HOST=$(az redis show --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query hostName -o tsv)
-          echo "connection_string=redis://:$REDIS_KEY@$REDIS_HOST:6380/0" >> $GITHUB_OUTPUT
+      - name: Extract metadata for celery image
+        id: meta-celery
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/nishikantmandal007/${{ env.IMAGE_NAME_CELERY }}
+          tags: |
+            type=raw,value=latest
 
-      - name: Deploy Web Container App
-        run: |
-          az containerapp create \
-            --name redactify-web \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-web:latest \
-            --target-port 5000 \
-            --ingress external \
-            --min-replicas 1 \
-            --max-replicas 3 \
-            --cpu 1.0 \
-            --memory 2Gi \
-            --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production
-
-      - name: Deploy Celery Worker Container App
-        run: |
-          az containerapp create \
-            --name redactify-celery \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/nishikantmandal007/redactify-celery:latest \
-            --min-replicas 1 \
-            --max-replicas 2 \
-            --cpu 1.0 \
-            --memory 2Gi \
-            --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
-            --command "celery" \
-            --args "-A,Redactify.services.celery_service.celery,worker,--loglevel=info,-Q,redaction,--concurrency=2,-E"
-
-      - name: Get Web App URL
-        run: |
-          FQDN=$(az containerapp show --name redactify-web --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv)
-          echo "🚀 Application deployed at: https://$FQDN"
+      - name: Build and push celery image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Redactify/Dockerfile
+          push: true
+          tags: ${{ steps.meta-celery.outputs.tags }}
+          labels: ${{ steps.meta-celery.outputs.labels }}
