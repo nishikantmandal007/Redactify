@@ -86,3 +86,18 @@ jobs:
           labels: ${{ steps.meta-celery.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Clean up old Docker images
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          # Keep only the latest 3 versions of each image to save storage
+          echo "Cleaning up old Docker image versions..."
+          gh api repos/${{ github.repository }}/packages/container/redactify-web/versions \
+            --jq '.[3:] | .[].id' | \
+            xargs -I {} gh api repos/${{ github.repository }}/packages/container/redactify-web/versions/{} -X DELETE || true
+          
+          gh api repos/${{ github.repository }}/packages/container/redactify-celery/versions \
+            --jq '.[3:] | .[].id' | \
+            xargs -I {} gh api repos/${{ github.repository }}/packages/container/redactify-celery/versions/{} -X DELETE || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

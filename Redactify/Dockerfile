@@ -22,7 +22,7 @@ RUN apt-get update && \
 COPY Redactify/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir --user -r /app/requirements.txt && \
-    python -m spacy download en_core_web_lg --user
+    python -m spacy download en_core_web_sm --user
 
 # 2. Production Image
 FROM python:3.11-slim
