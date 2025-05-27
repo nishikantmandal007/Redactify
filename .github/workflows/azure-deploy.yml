@@ -91,9 +91,9 @@ jobs:
             --registry-password ${{ secrets.GITHUB_TOKEN }} \
             --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
             --command "celery" \
-            --args "-A" "Redactify.services.celery_service.celery" "worker" "--loglevel=info" "-Q" "redaction" "--concurrency=2" "-E"
+            --args "-A Redactify.services.celery_service.celery worker --loglevel=info -Q redaction --concurrency=2 -E"
 
       - name: Get Web App URL
         run: |
-          FQDN=$(az containerapp show --name redactify-web --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv)
+          FQDN=$(az containerapp show --name redactify-web-cpu --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv)
           echo "\uD83D\uDE80 Application deployed at: https://$FQDN"
