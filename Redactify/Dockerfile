@@ -1,19 +1,40 @@
-# Dockerfile for Redactify - CPU-Only Deployment
+# Dockerfile for Redactify - CPU-Only Deployment (Multi-stage optimized)
 
-# 1. Base Image
-# Using an official Python 3.11 slim image for a smaller footprint
-FROM python:3.11-slim
+# 1. Base Image for Building
+FROM python:3.11-slim as builder
 
-# 2. Labels
-LABEL maintainer="Redactify Team <contact@redactify.example.com>"
-LABEL description="Redactify application - CPU-only deployment."
-
-# 3. Set Working Directory
+# Set Working Directory
 WORKDIR /app
 
-# 4. System Dependencies
-# Install system dependencies required for the application
-# Using --no-install-recommends to reduce image size
+# System Dependencies for building
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    libssl-dev \
+    libffi-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
+
+# Copy requirements and install Python packages
+COPY Redactify/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --user -r /app/requirements.txt && \
+    python -m spacy download en_core_web_sm --user
+
+# 2. Production Image
+FROM python:3.11-slim
+
+# Labels
+LABEL maintainer="Redactify Team <contact@redactify.example.com>"
+LABEL description="Redactify application - CPU-only deployment (optimized)."
+
+# Set Working Directory
+WORKDIR /app
+
+# System Dependencies (runtime only)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     python3-opencv \
@@ -24,46 +45,35 @@ RUN apt-get update && \
     libxrender1 \
     libxext6 \
     curl \
-    gnupg \
-    libzbar0 && \
-    # Clean up apt cache
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    libzbar0 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
 
-# Ensure pip is upgraded
-RUN pip install --no-cache-dir --upgrade pip
+# Copy Python packages from builder stage
+COPY --from=builder /root/.local /root/.local
 
-# 5. Python Environment & Dependencies
-# Copy the CPU-specific requirements file from the Redactify subdirectory of the build context
-# to /app/requirements.txt in the image.
-COPY Redactify/requirements.txt /app/requirements.txt
+# Make sure scripts in .local are usable:
+ENV PATH=/root/.local/bin:$PATH
 
-# Install Python dependencies from requirements.txt
-# Using --no-cache-dir to reduce image size
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Install spaCy models explicitly
-RUN python -m spacy download en_core_web_trf
-
-# 6. Copy Application Code
-# This copies the entire build context (project root) into the /app directory in the image.
-# The 'Redactify' application directory will be at /app/Redactify/.
+# Copy Application Code
 COPY . /app/
 
-# 7. Environment Variables
+# Environment Variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_ENV=production
-# FLASK_APP should point to the application entry point relative to PYTHONPATH.
-# WORKDIR /app adds /app to PYTHONPATH. App code is in /app/Redactify/.
 ENV FLASK_APP=Redactify.app
 
-# 8. Expose Port and Define CMD
-EXPOSE 5000
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+USER app
 
-# The CMD instruction for gunicorn.
-# It looks for the 'Redactify' package, which is located at /app/Redactify/.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "Redactify.web.app_factory:create_app(production=True)", "--workers", "4", "--timeout", "120"]
+# Expose Port and Define CMD
+EXPOSE 5000
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "Redactify.web.app_factory:create_app(production=True)", "--workers", "2", "--timeout", "120"]
 
 # Build instructions reminder:
 # This Dockerfile is intended to be placed at `Redactify/Dockerfile`.

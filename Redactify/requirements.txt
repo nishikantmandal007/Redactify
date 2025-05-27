@@ -18,7 +18,7 @@ pyzbar>=0.1.8  # For QR code detection
 
 # Computer Vision & OCR
 Pillow>=9.0.0  # Python Imaging Library
-opencv-python>=4.5.0  # Computer Vision library
+opencv-python-headless>=4.5.0  # Computer Vision library (headless for smaller size)
 paddlepaddle>=2.5.0  # Deep learning framework used by PaddleOCR
 paddleocr>=2.5.0  # OCR engine for text detection
 layoutparser>=0.3.4  # For document layout analysis
