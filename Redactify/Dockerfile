@@ -52,10 +52,7 @@ RUN apt-get update && \
     && rm -rf /var/tmp/*
 
 # Copy Python packages from builder stage
-COPY --from=builder /root/.local /root/.local
-
-# Make sure scripts in .local are usable:
-ENV PATH=/root/.local/bin:$PATH
+COPY --from=builder /root/.local /home/app/.local
 
 # Copy Application Code
 COPY . /app/
@@ -68,7 +65,12 @@ ENV FLASK_APP=Redactify.app
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app && \
-    chown -R app:app /app
+    chown -R app:app /app && \
+    chown -R app:app /home/app/.local
+
+# Make sure scripts in .local are usable:
+ENV PATH=/home/app/.local/bin:$PATH
+
 USER app
 
 # Expose Port and Define CMD
