@@ -127,3 +127,7 @@ docker/data/uploads/
 docker/data/temp_files/
 **/data/uploads/
 **/data/temp_files/
+
+# Project specific files to ignore
+IMP.txt
+DEPLOYMENT-STATUS.md
