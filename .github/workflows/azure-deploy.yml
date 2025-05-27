@@ -63,7 +63,7 @@ jobs:
             --name redactify-web-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-web:latest \
+            --image ghcr.io/nishikantmandal007/redactify-web-cpu:latest \
             --target-port 5000 \
             --ingress external \
             --min-replicas 1 \
@@ -71,8 +71,8 @@ jobs:
             --cpu 1.0 \
             --memory 2Gi \
             --registry-server ${{ env.REGISTRY }} \
-            --registry-username ${{ secrets.GHCR_USERNAME }} \
-            --registry-password ${{ secrets.GHCR_TOKEN }} \
+            --registry-username ${{ github.actor }} \
+            --registry-password ${{ secrets.GITHUB_TOKEN }} \
             --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production
 
       - name: Deploy Celery Worker Container App
@@ -81,14 +81,14 @@ jobs:
             --name redactify-celery-cpu \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --environment ${{ env.AZURE_CONTAINER_APP_ENV }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/redactify-celery-cpu:latest \
+            --image ghcr.io/nishikantmandal007/redactify-celery-cpu:latest \
             --min-replicas 1 \
             --max-replicas 2 \
             --cpu 1.0 \
             --memory 2Gi \
             --registry-server ${{ env.REGISTRY }} \
-            --registry-username ${{ secrets.GHCR_USERNAME }} \
-            --registry-password ${{ secrets.GHCR_TOKEN }} \
+            --registry-username ${{ github.actor }} \
+            --registry-password ${{ secrets.GITHUB_TOKEN }} \
             --env-vars REDACTIFY_REDIS_URL="${{ steps.redis.outputs.connection_string }}" FLASK_ENV=production \
             --command "celery" \
             --args "-A,Redactify.services.celery_service.celery,worker,--loglevel=info,-Q,redaction,--concurrency=2,-E"
