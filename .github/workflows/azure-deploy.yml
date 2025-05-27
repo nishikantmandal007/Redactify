@@ -57,15 +57,6 @@ jobs:
           REDIS_HOST=$(az redis show --name redactify-redis --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query hostName -o tsv)
           echo "connection_string=redis://:$REDIS_KEY@$REDIS_HOST:6380/0" >> $GITHUB_OUTPUT
 
-      - name: Create image pull secret for GHCR
-        run: |
-          az containerapp registry set \
-            --name redactify-web-cpu \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --server ${{ env.REGISTRY }} \
-            --username ${{ github.actor }} \
-            --password ${{ secrets.GHCR_TOKEN }}
-
       - name: Deploy Web Container App
         run: |
           az containerapp create \
