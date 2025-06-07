@@ -8,14 +8,16 @@ import numpy as np
 from PIL import Image, ImageFont, ImageDraw
 import gc
 import psutil
+import shutil
 from .qr_code_processor import detect_and_redact_qr_codes
+from .image_metadata_processor import clean_image_metadata
 import time
 import signal
 from contextlib import contextmanager
 import queue
 from threading import Thread
 from typing import List, Optional, Tuple, Set
-from ..recognizers.entity_types import QR_CODE_ENTITY
+from ..recognizers.entity_types import QR_CODE_ENTITY, METADATA_ENTITY
 from ..utils.gpu_utils import is_gpu_available, get_gpu_enabled_opencv, accelerate_image_processing, initialize_paddle_gpu, GPUResourceManager
 
 # Add a timeout mechanism to prevent hanging on problematic images
@@ -387,19 +389,52 @@ def redact_Image(image_path, analyzer, ocr, pii_types_selected, custom_rules=Non
                     'status': 'Image loaded successfully'
                 }
             )
-            
-        # Check if QR code redaction is requested
+             # Check if QR code redaction is requested
         redact_qr_codes = "QR_CODE" in pii_types_selected
         
-        # Separate PII types into text-based and non-text types
-        text_pii_types = [t for t in pii_types_selected if t != "QR_CODE"]
+        # Check if metadata redaction is requested (will be handled separately)
+        process_metadata = "METADATA" in pii_types_selected or METADATA_ENTITY in pii_types_selected
         
-        # Create a copy of the array for drawing redactions
+        # Separate PII types into text-based and non-text types
+        text_pii_types = [t for t in pii_types_selected if t != "QR_CODE" and t != "METADATA" and t != METADATA_ENTITY]
+        
+        # Log about metadata processing if requested
+        if process_metadata:
+            logging.info(f"Metadata redaction requested for image: {os.path.basename(image_path)}")
+            
+        # Check if we need OCR processing at all (skip if only metadata is requested)
+        need_ocr_processing = len(text_pii_types) > 0
+        if not need_ocr_processing and not redact_qr_codes and process_metadata:
+            logging.info(f"Only metadata redaction requested, skipping OCR processing completely")            # Create a copy of the array for drawing redactions
         img_to_draw_on = img_array.copy()
         
         # Free original if possible to save memory
         del img_array
         gc.collect()
+        
+        # If we only need to process metadata, take a faster path
+        if process_metadata and not need_ocr_processing and not redact_qr_codes:
+            logging.info("Fast path: Only metadata redaction requested, skipping content processing")
+            
+            # Define output path for the file
+            output_image_path = os.path.join(temp_dir, f"redacted_image_{safe_base_name}{file_extension}")
+            
+            # Create an initial copy for metadata processing
+            shutil.copy2(image_path, output_image_path)
+            
+            # Clean metadata from the image
+            success, metadata_stats = clean_image_metadata(output_image_path)
+            
+            # Add METADATA to redacted entity types if successful
+            if success and metadata_stats['metadata_cleaned']:
+                redacted_entity_types.add(METADATA_ENTITY)
+                logging.info(f"Image metadata cleaned: {metadata_stats}")
+                return output_image_path, redacted_entity_types
+            else:
+                # If no metadata was actually cleaned, return original
+                logging.info("No metadata found to clean")
+                os.remove(output_image_path)  # Clean up the temporary copy
+                return image_path, redacted_entity_types
         
         # QR Code and Barcode Detection and Redaction
         if redact_qr_codes:
@@ -420,7 +455,11 @@ def redact_Image(image_path, analyzer, ocr, pii_types_selected, custom_rules=Non
                 logging.warning(f"Error in barcode detection: {qr_err}")
         
         # OCR Process for text redaction
-        if text_pii_types:
+        # Only run OCR if we have text PII types to process
+        if need_ocr_processing and text_pii_types:
+            # Log PII types being processed for debugging
+            logging.info(f"Processing text PII types: {text_pii_types}")
+            
             # Run OCR on the image with process isolation and timeout
             ocr_result = None
             ocr_error = None
@@ -457,17 +496,72 @@ def redact_Image(image_path, analyzer, ocr, pii_types_selected, custom_rules=Non
                 )
                 
             # Extract text, word boxes, and create a mapping from text to boxes
+            ocr_start_extract = time.time()
             page_text, word_boxes, char_to_box_map = extract_ocr_results(ocr_result, ocr_confidence_threshold)
+            logging.debug(f"OCR extraction took {time.time() - ocr_start_extract:.2f} seconds")
+            
+            # Free up memory from OCR result
+            del ocr_result
+            gc.collect()
             
             # If we have text content, analyze for PII
             if page_text.strip():
                 try:
-                    # Analyze text for PII using Presidio
-                    analyzer_results = analyzer.analyze(
-                        text=page_text,
-                        entities=text_pii_types,
-                        language='en'
-                    )
+                    # Add specific timeout for the analyze step which is the bottleneck
+                    # First, check text length and potentially chunk it if too large
+                    max_text_length = 5000  # Set a reasonable maximum to avoid analyzer hanging
+                    
+                    if len(page_text) > max_text_length:
+                        # Log the chunking operation
+                        logging.info(f"Text too large ({len(page_text)} chars), splitting into smaller chunks")
+                        
+                        # Split text into manageable chunks with some overlap to preserve entities
+                        chunk_size = 4000
+                        overlap = 200
+                        text_chunks = []
+                        
+                        for i in range(0, len(page_text), chunk_size - overlap):
+                            chunk = page_text[i:i + chunk_size]
+                            text_chunks.append((i, chunk))
+                        
+                        # Process each chunk separately
+                        all_results = []
+                        
+                        for chunk_start, chunk_text in text_chunks:
+                            # Log each chunk analysis
+                            logging.debug(f"Analyzing chunk of {len(chunk_text)} chars from position {chunk_start}")
+                            
+                            with time_limit(10):  # Lower timeout per chunk
+                                chunk_results = analyzer.analyze(
+                                    text=chunk_text,
+                                    entities=text_pii_types,
+                                    language='en'
+                                )
+                                
+                                # Adjust offsets to match the original text
+                                for result in chunk_results:
+                                    result.start += chunk_start
+                                    result.end += chunk_start
+                                
+                                all_results.extend(chunk_results)
+                        
+                        analyzer_results = all_results
+                        logging.info(f"Chunked analysis complete: found {len(analyzer_results)} potential entities")
+                    else:
+                        # Regular analysis for smaller texts
+                        with time_limit(30):  # 30 seconds max for analysis
+                            # Log the start of analysis
+                            logging.info(f"Starting PII analysis on text ({len(page_text)} chars)")
+                            
+                            # Analyze text for PII using Presidio
+                            analyzer_results = analyzer.analyze(
+                                text=page_text,
+                                entities=text_pii_types,
+                                language='en'
+                            )
+                            
+                            # Log successful completion
+                            logging.info(f"Analysis complete: found {len(analyzer_results)} potential entities")
                     
                     # Filter by confidence threshold
                     entities_to_redact_conf = [
@@ -502,9 +596,86 @@ def redact_Image(image_path, analyzer, ocr, pii_types_selected, custom_rules=Non
                         for entity in entities_to_redact:
                             redacted_entity_types.add(entity.entity_type)
                             
+                except TimeoutError:
+                    logging.warning("PII analysis timed out, continuing with QR code redactions only")
+                    # Still continue with any QR code redactions we have
+                    entities_to_redact = []
                 except Exception as analyze_err:
                     logging.error(f"Error analyzing text: {analyze_err}")
+                    # Still proceed with QR code redactions
+                    entities_to_redact = []
         
+        # Process image metadata if requested
+        if process_metadata:
+            if task_context:
+                task_context.update_state(
+                    state='PROGRESS', 
+                    meta={
+                        'current': 85, 
+                        'total': 100, 
+                        'status': 'Cleaning image metadata'
+                    }
+                )
+            
+            try:
+                # We'll process the original image file for metadata
+                # since we may not have made any content redactions yet
+                metadata_source = image_path
+                
+                # If we've already done some redactions and have a modified image,
+                # make sure we copy the redacted content first before cleaning metadata
+                needs_image_copy = len(redacted_entity_types) > 0 or total_qr_redactions > 0
+                
+                if needs_image_copy:
+                    # First save the redacted content to the output file
+                    output_image_path = os.path.join(temp_dir, f"redacted_image_{safe_base_name}{file_extension}")
+                    
+                    # Convert from OpenCV's BGR to RGB for PIL if needed
+                    img_rgb = cv2.cvtColor(img_to_draw_on, cv2.COLOR_BGR2RGB)
+                    redacted_pil_image = Image.fromarray(img_rgb)
+                    
+                    # Save with appropriate format based on the original extension
+                    if file_extension.lower() in ['.jpg', '.jpeg']:
+                        redacted_pil_image.save(output_image_path, "JPEG", quality=compression_quality)
+                    elif file_extension.lower() == '.png':
+                        redacted_pil_image.save(output_image_path, "PNG", optimize=True)
+                    elif file_extension.lower() == '.gif':
+                        redacted_pil_image.save(output_image_path, "GIF")
+                    elif file_extension.lower() in ['.tif', '.tiff']:
+                        redacted_pil_image.save(output_image_path, "TIFF", compression='tiff_deflate')
+                    elif file_extension.lower() == '.bmp':
+                        redacted_pil_image.save(output_image_path, "BMP")
+                    else:
+                        # Default to JPEG if unsupported format
+                        output_image_path = os.path.join(temp_dir, f"redacted_image_{safe_base_name}.jpg")
+                        redacted_pil_image.save(output_image_path, "JPEG", quality=compression_quality)
+                        
+                    # Clean up PIL image
+                    redacted_pil_image.close()
+                    del redacted_pil_image
+                    gc.collect()
+                    
+                    # Now set the output path as the source for metadata processing
+                    metadata_source = output_image_path
+                
+                # Clean metadata from the image
+                success, metadata_stats = clean_image_metadata(metadata_source)
+                
+                # If successful, add METADATA to redacted entity types
+                if success and metadata_stats['metadata_cleaned']:
+                    redacted_entity_types.add(METADATA_ENTITY)
+                    logging.info(f"Image metadata cleaned: {metadata_stats}")
+                    
+                    # Even if we didn't make other redactions, we've now processed the metadata
+                    # so we need to return the processed file
+                    if not needs_image_copy:
+                        output_image_path = metadata_source
+                        needs_image_copy = True
+                
+            except Exception as e:
+                logging.error(f"Error cleaning image metadata: {e}", exc_info=True)
+                # Continue with other redactions even if metadata cleaning fails
+            
         # Save the processed image
         # If no redactions were made, return the original path
         if len(redacted_entity_types) == 0 and total_qr_redactions == 0:
@@ -580,17 +751,56 @@ def extract_ocr_results(ocr_result, confidence_threshold):
     """
     page_text = ""
     word_boxes = []
-    char_to_box_map = {}
+    char_to_box_map = []
+    
+    # Add diagnostic logging at start of function
+    logging.debug(f"Starting OCR extraction, result type: {type(ocr_result)}")
     
     try:
-        if not ocr_result or not ocr_result[0]:
+        # Handle case when OCR result is empty or None
+        if not ocr_result:
+            logging.warning("Empty OCR result received")
+            return page_text, word_boxes, char_to_box_map
+            
+        # Check if first element exists and handle both list and dict formats
+        first_element = None
+        if isinstance(ocr_result, list) and len(ocr_result) > 0:
+            first_element = ocr_result[0]
+        elif isinstance(ocr_result, dict) and ocr_result.get(0):
+            first_element = ocr_result.get(0)
+            
+        # If no valid first element, return empty results
+        if not first_element:
             return page_text, word_boxes, char_to_box_map
             
         char_index = 0
         
+        # Handle different format possibilities for ocr_result[0]
+        items_to_process = []
+        if isinstance(first_element, list):
+            items_to_process = first_element
+        elif isinstance(first_element, dict):
+            items_to_process = first_element.values()
+        else:
+            logging.warning(f"Unexpected OCR result format: {type(first_element)}")
+            return page_text, word_boxes, char_to_box_map
+        
+        # Log the number of items to process
+        logging.debug(f"Processing {len(items_to_process)} OCR text elements")
+        
+        # Check if we have an unusually large number of items to process
+        if len(items_to_process) > 1000:
+            logging.warning(f"Large OCR result detected: {len(items_to_process)} items. Processing in batches.")
+            # Process in batches to avoid memory issues
+            items_batch_size = 500
+            items_to_process = list(items_to_process)[:2000]  # Limit to first 2000 items to prevent hang
+        
         # Process each line of OCR results
-        for line_result in ocr_result[0]:
-            if len(line_result) >= 2:
+        for line_result in items_to_process:
+            if not isinstance(line_result, (list, tuple)) or len(line_result) < 2:
+                continue
+                
+            try:
                 # Extract the text and bounding box points
                 box_points = line_result[0]
                 text = line_result[1][0]
@@ -629,6 +839,9 @@ def extract_ocr_results(ocr_result, confidence_threshold):
                     
                     # Move index past the space
                     char_index += 1
+            except Exception as line_err:
+                logging.debug(f"Error processing OCR line result: {line_err}")
+                continue
                     
     except Exception as e:
         logging.error(f"Error parsing OCR results: {e}")

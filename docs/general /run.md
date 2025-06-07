@@ -184,16 +184,37 @@ celery -A Redactify.services.celery_service.celery worker \
   --loglevel=info \
   --concurrency=4 \
   -Q redaction \
+  --max-memory-per-child=500000 \  # 500MB per worker
   --hostname=redaction@%h
 
-# High-performance setup
+# High-performance setup (Choose ONE of these based on your server's RAM)
+
+# For low memory environments (16GB RAM or less)
+celery -A Redactify.services.celery_service.celery worker \
+  --loglevel=info \
+  --concurrency=4 \
+  -Q redaction \
+  --max-memory-per-child=400000 \  # 400MB per worker
+  --hostname=redaction@%h \
+  --pool=prefork
+
+# For medium memory environments (32GB RAM)
 celery -A Redactify.services.celery_service.celery worker \
   --loglevel=info \
   --concurrency=8 \
   -Q redaction \
+  --max-memory-per-child=750000 \  # 750MB per worker
   --hostname=redaction@%h \
-  --pool=prefork \
-  --max-memory-per-child=1000000  # 1GB per worker
+  --pool=prefork
+
+# For high memory environments (64GB+ RAM)
+celery -A Redactify.services.celery_service.celery worker \
+  --loglevel=info \
+  --concurrency=16 \
+  -Q redaction \
+  --max-memory-per-child=1000000 \  # 1GB per worker
+  --hostname=redaction@%h \
+  --pool=prefork
 ```
 
 #### Terminal 3: Celery Maintenance Worker

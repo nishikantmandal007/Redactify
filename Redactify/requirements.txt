@@ -1,4 +1,10 @@
-# Redactify - PDF PII Redaction Tool Requirements (CPU Mode)
+# Redactify - # Image Processing
+pdf2image>=1.16.0  # For converting PDF pages to images
+pyzbar>=0.1.8  # For QR code detection
+piexif>=1.1.3  # For reading/writing EXIF metadata in images
+
+# Computer Vision & OCR
+Pillow>=9.0.0  # Python Imaging LibraryI Redaction Tool Requirements (CPU Mode)
 # For GPU support, see requirements_gpu.txt.
 
 # Core Dependencies

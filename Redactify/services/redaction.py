@@ -203,6 +203,11 @@ def redact_image(image_path, pii_types_selected, custom_rules=None, task_context
             barcode_desc = ", ".join([f"{code} ({get_supported_barcode_types().get(code, 'Unknown')})" for code in barcode_types_to_redact])
             logging.info(f"Redacting specific barcode types in image: {barcode_desc}")
             
+        # Check if metadata redaction is requested
+        process_metadata = METADATA_ENTITY in pii_types_selected
+        if process_metadata:
+            logging.info(f"Metadata redaction requested for image: {os.path.basename(image_path)}")
+            
         # Call the processor function
         output_path, redacted_types = process_image(
             image_path=image_path,
