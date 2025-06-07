@@ -220,7 +220,3 @@ redis_url: redis://localhost:6379/0
 | [API Documentation](docs/api.md) | REST API reference |
 | [Configuration Guide](docs/configuration.md) | Configuration options |
 | [Architecture Guide](docs/architecture.md) | System design |
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
