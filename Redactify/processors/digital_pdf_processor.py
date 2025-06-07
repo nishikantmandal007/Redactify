@@ -134,7 +134,16 @@ def redact_digital_pdf(pdf_path, analyzer, pii_types_selected, custom_rules=None
                                 entity_type = entity.entity_type
                                 entity_text = text[entity.start:entity.end]
                                 rects = page.search_for(entity_text)
-                                
+
+                                print(f" \n=== COORDINATES FOR: '{entity_text}' ===")
+                                print(f"Entity Type: {entity_type}")
+                                print(f"Page: {page_num + 1}")
+
+                                for i, rect in enumerate(rects):
+                                    print(f" Rectangle {i + 1}: x0={rect.x0: .2f}, y0={rect.y0: .2f}, x1={rect.x1: .2f}, y1={rect.y1: .2f}")
+                                    print(f" Width: {rect.width: .2f}, Height: {rect.height: .2f}")
+                                    print(f" Area: {rect.width * rect.height: .2f}")
+
                                 # Generate label text using centralized function
                                 label_text = generate_label_text(entity_type, entity_counters[entity_type])
                                 
